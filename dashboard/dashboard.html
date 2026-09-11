@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Análise de Tornozeleira — Painel</title>
+  <link rel="stylesheet" href="../lib/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Análise de Tornozeleira Eletrônica</h1>
+    <div class="file-controls">
+      <label class="file-btn">
+        Carregar arquivo (CSV ou PDF)
+        <input type="file" id="file-input" accept=".csv,.pdf,text/csv,application/pdf" hidden />
+      </label>
+      <span id="file-status" class="file-status"></span>
+    </div>
+  </header>
+
+  <p class="privacy-note">
+    Todo o processamento acontece localmente, no seu navegador. Nenhum dado do arquivo é enviado a servidores —
+    exceto se você clicar explicitamente em "Buscar geolocalização por IP" numa linha específica, o que envia
+    apenas aquele IP a um serviço externo (ipapi.co).
+  </p>
+
+  <div id="warnings" class="warnings" hidden></div>
+
+  <section class="filter-bar">
+    <label>De: <input type="datetime-local" id="filter-start" /></label>
+    <label>Até: <input type="datetime-local" id="filter-end" /></label>
+    <button id="apply-filter">Aplicar filtro</button>
+    <button id="clear-filter">Limpar filtro</button>
+    <div id="stats" class="stats"></div>
+  </section>
+
+  <section class="map-section">
+    <div id="map"></div>
+  </section>
+
+  <section class="playback-bar">
+    <button id="play-btn" disabled>▶ Reproduzir</button>
+    <button id="pause-btn" disabled>⏸ Pausar</button>
+    <input type="range" id="scrubber" min="0" max="1000" value="0" disabled />
+    <span id="playback-time" class="playback-time">-</span>
+    <label class="speed-label">
+      Velocidade
+      <select id="speed-select">
+        <option value="0.5">0.5x</option>
+        <option value="1" selected>1x</option>
+        <option value="2">2x</option>
+        <option value="4">4x</option>
+      </select>
+    </label>
+    <button id="export-video-btn" disabled>Gerar vídeo do deslocamento</button>
+    <span id="video-progress" class="video-progress"></span>
+  </section>
+
+  <section class="timeline-section">
+    <canvas id="timeline"></canvas>
+  </section>
+
+  <section class="export-bar">
+    <button id="export-pdf-btn" disabled>Exportar relatório (PDF)</button>
+    <button id="export-image-btn" disabled>Exportar relatório (imagem)</button>
+  </section>
+
+  <section class="lower-grid">
+    <div class="anomalies-panel">
+      <h2>Anomalias de deslocamento</h2>
+      <p class="hint">Trechos com velocidade implausível entre dois pontos consecutivos (possível burla/falha do dispositivo).</p>
+      <ul id="anomalies-list" class="anomalies-list"></ul>
+    </div>
+    <div class="records-panel">
+      <h2>Eventos (<span id="records-count">0</span>)</h2>
+      <div class="table-wrap">
+        <table id="records-table">
+          <thead>
+            <tr>
+              <th>Data/Hora criação</th>
+              <th>Ação</th>
+              <th>Dispositivo</th>
+              <th>IP</th>
+              <th>Latitude</th>
+              <th>Longitude</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="records-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <script src="../lib/leaflet/leaflet.js"></script>
+  <script src="../lib/papaparse/papaparse.min.js"></script>
+  <script src="../lib/jspdf/jspdf.umd.min.js"></script>
+  <script type="module" src="dashboard.js"></script>
+</body>
+</html>

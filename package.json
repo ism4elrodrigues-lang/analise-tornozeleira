@@ -1,0 +1,21 @@
+{
+  "name": "analise-tornozeleira",
+  "version": "1.0.0",
+  "description": "Extensão Chrome (Manifest V3) para análise de logs de acesso/geolocalização de monitoramento eletrônico.",
+  "private": true,
+  "scripts": {
+    "generate-icons": "node scripts/generate-icons.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ism4elrodrigues-lang/analise-tornozeleira.git"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "jspdf": "^4.2.1",
+    "leaflet": "^1.9.4",
+    "papaparse": "^5.7.0",
+    "pdfjs-dist": "^6.3.289",
+    "pngjs": "^7.0.0"
+  }
+}
