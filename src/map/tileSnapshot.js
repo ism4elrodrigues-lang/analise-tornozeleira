@@ -1,6 +1,7 @@
-// Utilitário compartilhado para "fotografar" o mapa (tiles CARTO) num <canvas>
-// próprio — usado tanto pelo exportador de vídeo quanto pelo de relatório,
-// já que nenhum dos dois pode simplesmente capturar o DOM do Leaflet.
+// Utilitário compartilhado para "fotografar" o mapa (tiles do provider
+// configurado em mapView.js) num <canvas> próprio — usado tanto pelo
+// exportador de vídeo quanto pelo de relatório, já que nenhum dos dois pode
+// simplesmente capturar o DOM do Leaflet.
 import { TILE_URL, TILE_SUBDOMAINS } from "./mapView.js";
 
 export function makeProjector(leafletMap, zoom, pixelBounds) {

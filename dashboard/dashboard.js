@@ -7,16 +7,21 @@ import { TimelineView } from "../src/timeline/timelineView.js";
 import { PlaybackController } from "../src/playback/playbackController.js";
 import { detectSpeedAnomalies } from "../src/anomalies/anomalyDetector.js";
 import { detectZoneViolationEpisodes } from "../src/anomalies/zoneViolations.js";
+import { detectAllConnections } from "../src/anomalies/caseConnections.js";
 import { exportVideo } from "../src/report/videoExporter.js";
 import { exportReportPdf, exportReportImage } from "../src/report/reportExporter.js";
 import { lookupIp } from "../src/ipgeo/ipGeolocation.js";
 import { formatDateTime, toDatetimeLocalValue, parseDatetimeLocal } from "../src/util/format.js";
+
+const CASE_COLORS = ["#1e3a5f", "#2e8b57", "#b8860b", "#6a5acd", "#c2185b", "#00838f", "#8d6e63", "#5d4037"];
 
 const el = (id) => document.getElementById(id);
 
 const fileInput = el("file-input");
 const fileStatus = el("file-status");
 const warningsBox = el("warnings");
+const casesSection = el("cases-section");
+const casesList = el("cases-list");
 const caseHeader = el("case-header");
 const caseName = el("case-name");
 const caseSubtitle = el("case-subtitle");
@@ -36,6 +41,8 @@ const exportVideoBtn = el("export-video-btn");
 const videoProgress = el("video-progress");
 const exportPdfBtn = el("export-pdf-btn");
 const exportImageBtn = el("export-image-btn");
+const connectionsSection = el("connections-section");
+const connectionsList = el("connections-list");
 const zoneViolationsBlock = el("zone-violations-block");
 const zoneViolationsList = el("zone-violations-list");
 const anomaliesList = el("anomalies-list");
@@ -46,13 +53,19 @@ const mapView = new MapView("map");
 const timelineView = new TimelineView(el("timeline"));
 const playback = new PlaybackController();
 
-let allRecords = [];
-let filteredRecords = [];
-let geoRecords = [];
-let speedAnomalies = [];
-let zoneEpisodes = [];
-let caseMeta = null;
+let cases = [];
+let activeCaseId = null;
+let caseSeq = 0;
+let colorSeq = 0;
 let scrubbing = false;
+
+function caseLabel(c) {
+  return c.caseMeta?.name || c.fileName;
+}
+
+function getActiveCase() {
+  return cases.find((c) => c.id === activeCaseId) || null;
+}
 
 function setControlsEnabled(enabled) {
   applyFilterBtn.disabled = !enabled;
@@ -66,10 +79,10 @@ fileInput.addEventListener("change", async () => {
   if (!file) return;
   fileStatus.textContent = `Lendo "${file.name}"...`;
   warningsBox.hidden = true;
-  caseMeta = null;
   try {
     const ext = file.name.split(".").pop().toLowerCase();
     let result;
+    let caseMeta = null;
     if (ext === "csv" || file.type === "text/csv") {
       result = await parseCsvFile(file);
     } else if (ext === "xlsx" || file.type.includes("spreadsheetml")) {
@@ -81,79 +94,168 @@ fileInput.addEventListener("change", async () => {
       throw new Error("Formato não reconhecido. Use um arquivo .csv, .xlsx ou .pdf.");
     }
 
-    allRecords = result.records;
-    fileStatus.textContent = `${file.name} — ${allRecords.length} eventos carregados.`;
+    const newCase = {
+      id: `case-${caseSeq++}`,
+      fileName: file.name,
+      color: CASE_COLORS[colorSeq++ % CASE_COLORS.length],
+      records: result.records,
+      caseMeta,
+      visible: true,
+    };
+    cases.push(newCase);
+    activeCaseId = newCase.id;
+
+    fileStatus.textContent = `${file.name} — ${newCase.records.length} eventos carregados. (${cases.length} caso${
+      cases.length > 1 ? "s" : ""
+    } carregado${cases.length > 1 ? "s" : ""})`;
 
     if (result.warnings && result.warnings.length > 0) {
       warningsBox.hidden = false;
       warningsBox.textContent = result.warnings.join(" ");
     }
 
-    renderCaseHeader();
-
-    if (allRecords.length === 0) {
-      setControlsEnabled(false);
-      return;
-    }
-
-    const first = allRecords[0].createdAt;
-    const last = allRecords[allRecords.length - 1].createdAt;
-    if (first) filterStart.value = toDatetimeLocalValue(first);
-    if (last) filterEnd.value = toDatetimeLocalValue(last);
-
     setControlsEnabled(true);
+    resetFilterToFullRange();
+    renderCasesMenu();
     applyFilter();
+    mapView.fitToVisible();
   } catch (err) {
     console.error(err);
     fileStatus.textContent = "";
     warningsBox.hidden = false;
     warningsBox.textContent = `Erro ao processar arquivo: ${err.message}`;
-    setControlsEnabled(false);
+  } finally {
+    fileInput.value = "";
   }
 });
 
+function resetFilterToFullRange() {
+  const allTimes = cases.flatMap((c) => c.records.map((r) => r.createdAt).filter(Boolean).map((d) => d.getTime()));
+  if (allTimes.length === 0) return;
+  filterStart.value = toDatetimeLocalValue(new Date(Math.min(...allTimes)));
+  filterEnd.value = toDatetimeLocalValue(new Date(Math.max(...allTimes)));
+}
+
 applyFilterBtn.addEventListener("click", applyFilter);
 clearFilterBtn.addEventListener("click", () => {
-  if (allRecords.length === 0) return;
-  const first = allRecords[0].createdAt;
-  const last = allRecords[allRecords.length - 1].createdAt;
-  if (first) filterStart.value = toDatetimeLocalValue(first);
-  if (last) filterEnd.value = toDatetimeLocalValue(last);
+  resetFilterToFullRange();
   applyFilter();
 });
 
 function applyFilter() {
-  if (allRecords.length === 0) return;
+  if (cases.length === 0) return;
   // O fim do intervalo é tratado como inclusive até o fim do minuto escolhido
   // (o <input type="datetime-local"> só tem granularidade de minuto).
   const startDate = parseDatetimeLocal(filterStart.value);
   const endDate = parseDatetimeLocal(filterEnd.value);
   const startMs = startDate ? startDate.getTime() : -Infinity;
   const endMs = endDate ? endDate.getTime() + 59_999 : Infinity;
-  filteredRecords = allRecords.filter((r) => {
-    if (!r.createdAt) return false;
-    const t = r.createdAt.getTime();
-    return t >= startMs && t <= endMs;
-  });
+  for (const c of cases) {
+    c.filteredRecords = c.records.filter((r) => {
+      if (!r.createdAt) return false;
+      const t = r.createdAt.getTime();
+      return t >= startMs && t <= endMs;
+    });
+  }
   render();
 }
 
+// --- Menu de casos ---
+
+function renderCasesMenu() {
+  casesSection.hidden = cases.length === 0;
+  casesList.innerHTML = "";
+  for (const c of cases) {
+    const li = document.createElement("li");
+    li.className = "case-row" + (c.id === activeCaseId ? " is-active" : "");
+
+    const swatch = document.createElement("span");
+    swatch.className = "case-swatch";
+    swatch.style.background = c.color;
+
+    const visToggle = document.createElement("input");
+    visToggle.type = "checkbox";
+    visToggle.checked = c.visible;
+    visToggle.title = "Mostrar no mapa e na linha do tempo";
+    visToggle.addEventListener("change", () => {
+      c.visible = visToggle.checked;
+      mapView.setCaseVisible(c.id, c.visible);
+      mapView.fitToVisible();
+      render();
+    });
+
+    const info = document.createElement("div");
+    info.className = "case-row-info";
+    const name = document.createElement("div");
+    name.className = "case-row-name";
+    name.textContent = caseLabel(c);
+    const sub = document.createElement("div");
+    sub.className = "case-row-sub";
+    const count = c.filteredRecords ? c.filteredRecords.length : c.records.length;
+    sub.textContent = `${count} eventos` + (c.caseMeta?.cpf ? ` · CPF ${c.caseMeta.cpf}` : "") + ` · ${c.fileName}`;
+    info.appendChild(name);
+    info.appendChild(sub);
+
+    const actions = document.createElement("div");
+    actions.className = "case-row-actions";
+
+    const activeBtn = document.createElement("button");
+    activeBtn.className = "case-active-btn";
+    activeBtn.textContent = c.id === activeCaseId ? "Ativo" : "Tornar ativo";
+    activeBtn.disabled = c.id === activeCaseId;
+    activeBtn.title = "Define este caso como o usado no cabeçalho, reprodução e exportação";
+    activeBtn.addEventListener("click", () => {
+      activeCaseId = c.id;
+      renderCasesMenu();
+      render();
+    });
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "case-remove-btn";
+    removeBtn.textContent = "Remover";
+    removeBtn.addEventListener("click", () => {
+      mapView.removeCase(c.id);
+      cases = cases.filter((x) => x.id !== c.id);
+      if (activeCaseId === c.id) activeCaseId = cases[0]?.id || null;
+      if (cases.length === 0) {
+        setControlsEnabled(false);
+        fileStatus.textContent = "";
+      }
+      resetFilterToFullRange();
+      renderCasesMenu();
+      applyFilter();
+      mapView.fitToVisible();
+    });
+
+    actions.appendChild(activeBtn);
+    actions.appendChild(removeBtn);
+
+    li.appendChild(swatch);
+    li.appendChild(visToggle);
+    li.appendChild(info);
+    li.appendChild(actions);
+    casesList.appendChild(li);
+  }
+}
+
 function renderCaseHeader() {
-  if (!caseMeta || (!caseMeta.name && !caseMeta.zone?.lat)) {
+  const active = getActiveCase();
+  const meta = active?.caseMeta;
+  if (!meta || (!meta.name && !meta.zone?.lat)) {
     caseHeader.hidden = true;
     return;
   }
   caseHeader.hidden = false;
-  caseName.textContent = caseMeta.name || "Monitorado não identificado";
+  caseName.textContent = meta.name || "Monitorado não identificado";
   caseSubtitle.textContent = [
-    caseMeta.monitoredId ? `ID ${caseMeta.monitoredId}` : null,
-    caseMeta.cpf ? `CPF ${caseMeta.cpf}` : null,
-    caseMeta.equipment,
+    meta.monitoredId ? `ID ${meta.monitoredId}` : null,
+    meta.cpf ? `CPF ${meta.cpf}` : null,
+    meta.equipment,
   ]
     .filter(Boolean)
     .join(" · ");
 
-  const zone = caseMeta.zone || {};
+  const zone = meta.zone || {};
   caseZone.innerHTML = "";
   if (zone.address) {
     caseZone.appendChild(labelLine("Zona de exclusão", zone.address));
@@ -165,7 +267,7 @@ function renderCaseHeader() {
     );
   }
 
-  const legal = caseMeta.legal || {};
+  const legal = meta.legal || {};
   caseLegal.innerHTML = "";
   if (legal.processNumber) caseLegal.appendChild(labelLine("Processo", legal.processNumber));
   if (legal.issuedAt) caseLegal.appendChild(labelLine("Relatório emitido em", legal.issuedAt));
@@ -180,47 +282,127 @@ function labelLine(label, value) {
   return div;
 }
 
+// --- Render principal ---
+
 function render() {
-  geoRecords = sortRecordsByDate(filteredRecords.filter((r) => r.hasGeo));
-  speedAnomalies = detectSpeedAnomalies(geoRecords);
-
-  const hasZone = !!(caseMeta && caseMeta.zone && caseMeta.zone.lat != null && caseMeta.zone.lon != null);
-  zoneEpisodes = hasZone ? detectZoneViolationEpisodes(sortRecordsByDate(filteredRecords.filter((r) => r.createdAt))) : [];
-
-  mapView.setRecords(geoRecords, onRecordSelect);
-  mapView.setAnomalies(speedAnomalies);
-  mapView.setExclusionZone(hasZone ? caseMeta.zone : null);
-
-  timelineView.setRecords(filteredRecords);
-  const highlightIds = new Set();
-  for (const a of speedAnomalies) {
-    highlightIds.add(a.from.id);
-    highlightIds.add(a.to.id);
+  if (cases.length === 0) {
+    mapView.fitToVisible();
+    timelineView.setCases([]);
+    renderCaseHeader();
+    connectionsSection.hidden = true;
+    zoneViolationsBlock.hidden = true;
+    anomaliesList.innerHTML = "";
+    recordsTbody.innerHTML = "";
+    recordsCount.textContent = "0";
+    statsBox.innerHTML = "";
+    playback.setRecords([]);
+    updatePlaybackControls();
+    return;
   }
-  for (const ep of zoneEpisodes) {
-    for (const r of ep.records) highlightIds.add(r.id);
+
+  for (const c of cases) {
+    c.geoRecords = sortRecordsByDate((c.filteredRecords || []).filter((r) => r.hasGeo));
+    c.speedAnomalies = detectSpeedAnomalies(c.geoRecords);
+    c.hasZone = !!(c.caseMeta && c.caseMeta.zone && c.caseMeta.zone.lat != null && c.caseMeta.zone.lon != null);
+    c.zoneEpisodes = c.hasZone
+      ? detectZoneViolationEpisodes(sortRecordsByDate((c.filteredRecords || []).filter((r) => r.createdAt)))
+      : [];
+
+    c.highlightIds = new Set();
+    for (const a of c.speedAnomalies) {
+      c.highlightIds.add(a.from.id);
+      c.highlightIds.add(a.to.id);
+    }
+    for (const ep of c.zoneEpisodes) {
+      for (const r of ep.records) c.highlightIds.add(r.id);
+    }
+
+    mapView.setCase(c.id, {
+      records: c.geoRecords,
+      color: c.color,
+      zone: c.hasZone ? c.caseMeta.zone : null,
+      visible: c.visible,
+      label: caseLabel(c),
+      onSelect: (r) => onRecordSelect(c.id, r),
+    });
+    mapView.setCaseAnomalies(c.id, c.speedAnomalies);
   }
-  timelineView.setHighlightedIds(highlightIds);
+
+  timelineView.setCases(
+    cases
+      .filter((c) => c.visible)
+      .map((c) => ({
+        id: c.id,
+        color: c.color,
+        label: caseLabel(c),
+        records: c.filteredRecords || [],
+        highlightIds: c.highlightIds,
+      }))
+  );
   timelineView.onPick = onRecordSelect;
 
-  playback.setRecords(geoRecords);
+  renderCaseHeader();
+  renderConnections();
+
+  const active = getActiveCase();
+  playback.setRecords(active ? active.geoRecords : []);
   updatePlaybackControls();
 
-  renderStats(hasZone);
-  zoneViolationsBlock.hidden = !hasZone;
-  if (hasZone) renderZoneViolations();
-  renderSpeedAnomalies();
-  renderTable();
+  renderStats(active);
+  const showZoneBlock = !!active?.hasZone;
+  zoneViolationsBlock.hidden = !showZoneBlock;
+  if (showZoneBlock) renderZoneViolations(active);
+  renderSpeedAnomalies(active);
+  renderTable(active);
+  renderCasesMenu();
 }
 
-function renderStats(hasZone) {
-  const first = filteredRecords[0]?.createdAt;
-  const last = filteredRecords[filteredRecords.length - 1]?.createdAt;
+function renderConnections() {
+  const visible = cases.filter((c) => c.visible && (c.filteredRecords || []).length > 0);
+  if (visible.length < 2) {
+    connectionsSection.hidden = true;
+    return;
+  }
+  const inputs = visible.map((c) => ({ id: c.id, label: caseLabel(c), records: c.filteredRecords }));
+  const connections = detectAllConnections(inputs);
+
+  connectionsSection.hidden = false;
+  connectionsList.innerHTML = "";
+  if (connections.length === 0) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = "Nenhuma coincidência de tempo/local entre os casos visíveis no intervalo selecionado.";
+    connectionsList.appendChild(li);
+    return;
+  }
+  for (const conn of connections) {
+    const li = document.createElement("li");
+    li.textContent =
+      `${conn.caseALabel} ↔ ${conn.caseBLabel}: ${formatDateTime(conn.start)} → ${formatDateTime(conn.end)}` +
+      ` — mín. ${conn.minDistanceM.toFixed(0)} m de distância`;
+    li.addEventListener("click", () => {
+      mapView.setCursor([conn.lat, conn.lon]);
+      mapView.panTo([conn.lat, conn.lon]);
+      timelineView.setCursorTime(conn.start);
+    });
+    connectionsList.appendChild(li);
+  }
+}
+
+function renderStats(active) {
+  if (!active) {
+    statsBox.innerHTML = "";
+    return;
+  }
+  const records = active.filteredRecords || [];
+  const first = records[0]?.createdAt;
+  const last = records[records.length - 1]?.createdAt;
   const chips = [
-    `${filteredRecords.length} eventos`,
-    `${geoRecords.length} com geolocalização`,
-    hasZone ? `${zoneEpisodes.length} violações de zona` : `${speedAnomalies.length} anomalias de velocidade`,
+    `${records.length} eventos`,
+    `${active.geoRecords.length} com geolocalização`,
+    active.hasZone ? `${active.zoneEpisodes.length} violações de zona` : `${active.speedAnomalies.length} anomalias de velocidade`,
     first && last ? `${formatDateTime(first)} — ${formatDateTime(last)}` : "",
+    cases.length > 1 ? `${cases.length} casos carregados` : "",
   ].filter(Boolean);
   statsBox.innerHTML = "";
   for (const c of chips) {
@@ -231,56 +413,52 @@ function renderStats(hasZone) {
   }
 }
 
-function renderZoneViolations() {
+function renderZoneViolations(active) {
   zoneViolationsList.innerHTML = "";
-  if (zoneEpisodes.length === 0) {
+  if (active.zoneEpisodes.length === 0) {
     const li = document.createElement("li");
     li.className = "empty";
     li.textContent = "Nenhuma violação da zona de exclusão no intervalo selecionado.";
     zoneViolationsList.appendChild(li);
     return;
   }
-  for (const ep of zoneEpisodes) {
+  for (const ep of active.zoneEpisodes) {
     const li = document.createElement("li");
     const durationTxt = ep.durationMin < 1 ? "menos de 1 min" : `${Math.round(ep.durationMin)} min`;
     const distTxt = ep.minDistanceM != null ? ` — mín. ${ep.minDistanceM.toFixed(0)} m da referência` : "";
     const addrTxt = ep.addresses.length > 0 ? ` (${ep.addresses[0]})` : "";
     li.textContent = `${formatDateTime(ep.start)} → ${formatDateTime(ep.end)} (${durationTxt})${distTxt}${addrTxt}`;
-    li.addEventListener("click", () => onRecordSelect(ep.records[0]));
+    li.addEventListener("click", () => onRecordSelect(active.id, ep.records[0]));
     zoneViolationsList.appendChild(li);
   }
 }
 
-function renderSpeedAnomalies() {
+function renderSpeedAnomalies(active) {
   anomaliesList.innerHTML = "";
-  if (speedAnomalies.length === 0) {
+  if (!active || active.speedAnomalies.length === 0) {
     const li = document.createElement("li");
     li.className = "empty";
     li.textContent = "Nenhuma anomalia de velocidade detectada no intervalo selecionado.";
     anomaliesList.appendChild(li);
     return;
   }
-  for (const a of speedAnomalies) {
+  for (const a of active.speedAnomalies) {
     const li = document.createElement("li");
     li.textContent = `${formatDateTime(a.from.createdAt)} → ${formatDateTime(a.to.createdAt)}: ${a.distanceKm.toFixed(
       1
     )} km em ${a.hours.toFixed(2)} h (${a.speedKmh.toFixed(0)} km/h)`;
-    li.addEventListener("click", () => onRecordSelect(a.to));
+    li.addEventListener("click", () => onRecordSelect(active.id, a.to));
     anomaliesList.appendChild(li);
   }
 }
 
-function renderTable() {
-  recordsCount.textContent = String(filteredRecords.length);
-  const highlightIds = new Set();
-  for (const a of speedAnomalies) {
-    highlightIds.add(a.from.id);
-    highlightIds.add(a.to.id);
-  }
-  for (const ep of zoneEpisodes) for (const r of ep.records) highlightIds.add(r.id);
+function renderTable(active) {
+  const records = active?.filteredRecords || [];
+  recordsCount.textContent = String(records.length);
+  const highlightIds = active?.highlightIds || new Set();
 
   const frag = document.createDocumentFragment();
-  for (const r of filteredRecords) {
+  for (const r of records) {
     const tr = document.createElement("tr");
     if (r.hasGeo) tr.classList.add("has-geo");
     if (r.isViolation || highlightIds.has(r.id)) tr.classList.add("anomaly-row");
@@ -336,24 +514,25 @@ function td(text) {
   return cell;
 }
 
-function onRecordSelect(record) {
+function onRecordSelect(caseId, record) {
   if (record.hasGeo) {
     mapView.setCursor([record.lat, record.lon]);
-    mapView.getLeafletMap().panTo([record.lat, record.lon]);
+    mapView.panTo([record.lat, record.lon]);
   }
   timelineView.setCursorTime(record.createdAt);
 }
 
-// --- Playback ---
+// --- Playback (sempre sobre o caso ativo) ---
 
 function updatePlaybackControls() {
+  const active = getActiveCase();
   const enabled = playback.hasAnimation;
   playBtn.disabled = !enabled;
   pauseBtn.disabled = !enabled;
   scrubber.disabled = !enabled;
-  exportVideoBtn.disabled = geoRecords.length === 0;
+  exportVideoBtn.disabled = !active || active.geoRecords.length === 0;
   scrubber.value = 0;
-  playbackTimeLabel.textContent = geoRecords.length > 0 ? formatDateTime(geoRecords[0].createdAt) : "-";
+  playbackTimeLabel.textContent = active && active.geoRecords.length > 0 ? formatDateTime(active.geoRecords[0].createdAt) : "-";
 }
 
 playback.onFrame = (frame) => {
@@ -377,17 +556,18 @@ scrubber.addEventListener("change", () => {
   scrubbing = false;
 });
 
-// --- Exportação ---
+// --- Exportação (sempre sobre o caso ativo) ---
 
 exportVideoBtn.addEventListener("click", async () => {
+  const active = getActiveCase();
+  if (!active) return;
   exportVideoBtn.disabled = true;
   videoProgress.textContent = "Gravando 0%...";
   try {
-    const hasZone = !!(caseMeta && caseMeta.zone && caseMeta.zone.lat != null && caseMeta.zone.lon != null);
     await exportVideo({
       mapView,
       playback,
-      zone: hasZone ? caseMeta.zone : null,
+      zone: active.hasZone ? active.caseMeta.zone : null,
       onProgress: (f) => {
         videoProgress.textContent = `Gravando ${Math.round(f * 100)}%...`;
       },
@@ -398,21 +578,23 @@ exportVideoBtn.addEventListener("click", async () => {
     videoProgress.textContent = "";
     alert(`Falha ao gerar vídeo: ${err.message}`);
   } finally {
-    exportVideoBtn.disabled = geoRecords.length === 0;
+    exportVideoBtn.disabled = !active || active.geoRecords.length === 0;
     setTimeout(() => (videoProgress.textContent = ""), 4000);
   }
 });
 
 exportPdfBtn.addEventListener("click", async () => {
+  const active = getActiveCase();
+  if (!active) return;
   exportPdfBtn.disabled = true;
   try {
     await exportReportPdf({
       mapView,
-      geoRecords,
-      anomalies: speedAnomalies,
-      zoneEpisodes,
-      caseMeta,
-      meta: buildMeta(),
+      geoRecords: active.geoRecords,
+      anomalies: active.speedAnomalies,
+      zoneEpisodes: active.zoneEpisodes,
+      caseMeta: active.caseMeta,
+      meta: buildMeta(active),
     });
   } catch (err) {
     console.error(err);
@@ -423,15 +605,17 @@ exportPdfBtn.addEventListener("click", async () => {
 });
 
 exportImageBtn.addEventListener("click", async () => {
+  const active = getActiveCase();
+  if (!active) return;
   exportImageBtn.disabled = true;
   try {
     await exportReportImage({
       mapView,
-      geoRecords,
-      anomalies: speedAnomalies,
-      zoneEpisodes,
-      caseMeta,
-      meta: buildMeta(),
+      geoRecords: active.geoRecords,
+      anomalies: active.speedAnomalies,
+      zoneEpisodes: active.zoneEpisodes,
+      caseMeta: active.caseMeta,
+      meta: buildMeta(active),
     });
   } catch (err) {
     console.error(err);
@@ -441,16 +625,17 @@ exportImageBtn.addEventListener("click", async () => {
   }
 });
 
-function buildMeta() {
-  const first = filteredRecords[0];
+function buildMeta(active) {
+  const records = active.filteredRecords || [];
+  const first = records[0];
   return {
     accountNumber: first?.accountNumber,
     cpf: first?.cpf,
-    periodStart: filteredRecords[0]?.createdAt,
-    periodEnd: filteredRecords[filteredRecords.length - 1]?.createdAt,
-    totalEvents: filteredRecords.length,
-    geoEvents: geoRecords.length,
-    anomaliesCount: speedAnomalies.length,
+    periodStart: records[0]?.createdAt,
+    periodEnd: records[records.length - 1]?.createdAt,
+    totalEvents: records.length,
+    geoEvents: active.geoRecords.length,
+    anomaliesCount: active.speedAnomalies.length,
   };
 }
 

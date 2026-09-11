@@ -11,7 +11,7 @@
     <h1>Análise de Tornozeleira Eletrônica</h1>
     <div class="file-controls">
       <label class="file-btn">
-        Carregar arquivo (CSV, XLSX ou PDF)
+        Adicionar caso (CSV, XLSX ou PDF)
         <input
           type="file"
           id="file-input"
@@ -26,10 +26,16 @@
   <p class="privacy-note">
     Todo o processamento acontece localmente, no seu navegador. Nenhum dado do arquivo é enviado a servidores —
     exceto se você clicar explicitamente em "Buscar geolocalização por IP" numa linha específica, o que envia
-    apenas aquele IP a um serviço externo (ipapi.co).
+    apenas aquele IP a um serviço externo (ipapi.co). Cada arquivo carregado vira um novo caso na lista abaixo —
+    os casos anteriores continuam abertos, para comparar rastros e localizar possíveis conexões entre monitorados.
   </p>
 
   <div id="warnings" class="warnings" hidden></div>
+
+  <section id="cases-section" class="cases-panel" hidden>
+    <h2>Casos carregados</h2>
+    <ul id="cases-list" class="cases-list"></ul>
+  </section>
 
   <section id="case-header" class="case-header" hidden>
     <div class="case-header-grid">
@@ -76,23 +82,33 @@
   <section class="export-bar">
     <button id="export-pdf-btn" disabled>Exportar relatório (PDF)</button>
     <button id="export-image-btn" disabled>Exportar relatório (imagem)</button>
+    <span class="hint export-hint">Reprodução e exportação sempre usam o caso marcado como "ativo" na lista de casos.</span>
+  </section>
+
+  <section id="connections-section" class="connections-panel" hidden>
+    <h2>Possíveis encontros entre casos</h2>
+    <p class="hint">
+      Pontos de dois casos visíveis que estiveram próximos no tempo e no espaço (até 200 m e 10 min de diferença).
+      Não é prova de encontro — apenas um indício a verificar.
+    </p>
+    <ul id="connections-list" class="anomalies-list"></ul>
   </section>
 
   <section class="lower-grid">
     <div class="anomalies-panel">
       <div id="zone-violations-block">
         <h2>Violações da zona de exclusão</h2>
-        <p class="hint">Episódios em que o monitorado permaneceu dentro do raio de restrição.</p>
+        <p class="hint">Episódios em que o monitorado (caso ativo) permaneceu dentro do raio de restrição.</p>
         <ul id="zone-violations-list" class="anomalies-list"></ul>
       </div>
       <div id="speed-anomalies-block">
         <h2>Anomalias de deslocamento</h2>
-        <p class="hint">Trechos com velocidade implausível entre dois pontos consecutivos (possível burla/falha do dispositivo).</p>
+        <p class="hint">Trechos do caso ativo com velocidade implausível entre dois pontos consecutivos (possível burla/falha do dispositivo).</p>
         <ul id="anomalies-list" class="anomalies-list"></ul>
       </div>
     </div>
     <div class="records-panel">
-      <h2>Eventos (<span id="records-count">0</span>)</h2>
+      <h2>Eventos do caso ativo (<span id="records-count">0</span>)</h2>
       <div class="table-wrap">
         <table id="records-table">
           <thead>

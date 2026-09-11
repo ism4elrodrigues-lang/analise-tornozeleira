@@ -22,25 +22,36 @@ acontece automaticamente.
 
 ## Uso
 
-1. No painel (aberto em uma nova aba), clique em "Carregar arquivo (CSV, XLSX ou PDF)".
+1. No painel (aberto em uma nova aba), clique em "Adicionar caso (CSV, XLSX ou PDF)".
 2. O formato é reconhecido automaticamente pela extensão do nome do arquivo.
-3. Se o arquivo XLSX trouxer dados do monitorado (nome, CPF, zona de exclusão,
-   processo), um cabeçalho do caso aparece no topo do painel e o mapa desenha
-   o círculo da zona de exclusão.
-4. Use os campos "De" / "Até" para restringir o período analisado.
-5. O mapa mostra os pontos com geolocalização e o trajeto entre eles (em
-   vermelho quando marcados como violação); a linha do tempo mostra todos os
-   eventos do período.
-6. Use os controles de reprodução para animar o deslocamento no mapa. O
-   orçamento total de tempo do playback é fixo (entre ~20s e ~90s,
-   dependendo da quantidade de pontos) e distribuído entre os trechos numa
-   escala log do intervalo real — não trava com rastros de centenas de
+3. **Cada arquivo carregado vira um novo caso** na lista "Casos carregados" —
+   os anteriores continuam abertos, cada um com sua própria cor no mapa e na
+   linha do tempo. Na lista dá para: mostrar/ocultar um caso, marcar qual é o
+   "ativo" (o usado no cabeçalho do caso, na reprodução e na exportação) e
+   remover um caso.
+4. Se um caso (XLSX) trouxer dados do monitorado (nome, CPF, zona de
+   exclusão, processo), um cabeçalho aparece no topo quando ele está ativo, e
+   o mapa desenha o círculo da zona de exclusão dele (mesmo se não for o
+   ativo, contanto que esteja visível).
+5. Use os campos "De" / "Até" para restringir o período analisado — o filtro
+   vale para todos os casos carregados.
+6. O mapa mostra os pontos com geolocalização de cada caso visível, na cor
+   dele (vermelho nos pontos/trechos marcados como violação); a linha do
+   tempo mostra uma raia por caso visível, cada uma na sua cor.
+7. Com 2+ casos visíveis, o painel **"Possíveis encontros entre casos"**
+   sinaliza quando pontos de dois casos estiveram próximos no tempo e no
+   espaço (até 200m e 10min de diferença, por padrão) — um indício de
+   possível conexão entre os monitorados, a ser confirmado por outros meios.
+8. Use os controles de reprodução para animar o deslocamento do caso ativo
+   no mapa. O orçamento total de tempo do playback é fixo (entre ~20s e
+   ~90s, dependendo da quantidade de pontos) e distribuído entre os trechos
+   numa escala log do intervalo real — não trava com rastros de centenas de
    pontos por minuto nem passa rápido demais em logs esparsos de dias.
-7. "Gerar vídeo do deslocamento" grava a animação atual como `.webm`,
-   desenhando também o círculo da zona de exclusão quando houver.
-8. "Exportar relatório (PDF/imagem)" gera um resumo com o cabeçalho do caso,
-   mapa, contagens e a lista de violações/anomalias, para anexar a
-   despacho/relatório.
+9. "Gerar vídeo do deslocamento" grava a animação do caso ativo como
+   `.webm`, desenhando também o círculo da zona de exclusão quando houver.
+10. "Exportar relatório (PDF/imagem)" gera um resumo do caso ativo com
+    cabeçalho, mapa, contagens e a lista de violações/anomalias, para anexar
+    a despacho/relatório.
 
 ## Formatos de entrada suportados
 
@@ -92,6 +103,23 @@ velocidade implícita entre dois pontos consecutivos — veja abaixo.
   ultrapassa 250 km/h — indício de possível falha ou burla do dispositivo,
   não uma conclusão definitiva.
 
+## Possíveis conexões entre casos
+
+Com dois ou mais casos visíveis simultaneamente, a extensão procura pares de
+pontos (um de cada caso) que estiveram a até 200m de distância e 10min um do
+outro, agrupando ocorrências próximas no tempo num único episódio. É apenas
+um indício estatístico de coincidência de tempo/local — não é prova de
+encontro nem leva em conta contexto (ex.: local público de grande circulação).
+
+## Mapa
+
+Os tiles vêm do tile server padrão do OpenStreetMap (`tile.openstreetmap.org`),
+que não exige cadastro nem API key. Se esse provider mudar de política (como a
+CARTO fez, que era usada antes e passou a exigir API key nos tiles gratuitos),
+troque `TILE_URL`/`TILE_SUBDOMAINS`/`TILE_ATTRIBUTION` em `src/map/mapView.js`
+— precisa ser um provider que também libere CORS nos tiles, para que o
+exportador de vídeo/relatório consiga ler o mapa de volta via `<canvas>`.
+
 ## Fuso horário
 
 Datas/horas dos três formatos são tratadas como horário de Brasília (UTC-3,
@@ -108,7 +136,7 @@ src/parsers/            Leitura de CSV, XLSX e PDF -> registros normalizados
 src/map/                Mapa (Leaflet), zona de exclusão e captura de tiles para vídeo/relatório
 src/timeline/           Linha do tempo (canvas)
 src/playback/           Controlador de reprodução/animação
-src/anomalies/          Detecção de velocidade implausível e de violação de zona
+src/anomalies/          Detecção de velocidade implausível, violação de zona e conexões entre casos
 src/report/             Exportação de vídeo e relatório (PDF/imagem)
 src/ipgeo/              Geolocalização por IP (opt-in)
 lib/                    Bibliotecas de terceiros vendorizadas (Leaflet, PapaParse, pdf.js, SheetJS, jsPDF)

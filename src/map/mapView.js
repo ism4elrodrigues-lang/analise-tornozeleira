@@ -1,15 +1,21 @@
 // Depende do global `L` (Leaflet), carregado via <script> a partir de lib/leaflet/leaflet.js.
 //
-// Usa tiles da CARTO (não o tile server padrão do OSM) porque precisamos que a
-// imagem do mapa possa ser lida de volta via <canvas> (crossOrigin) para o
-// exportador de vídeo/relatório — a CARTO envia cabeçalho CORS liberado nos
-// tiles, o OSM tile server padrão não garante isso.
+// Tile provider: usamos o tile server padrão do OpenStreetMap, que nunca
+// exige chave de API. (Antes usávamos CARTO, que passou a exigir cadastro/API
+// key nos tiles gratuitos — se isso mudar de novo no futuro, troque TILE_URL/
+// TILE_SUBDOMAINS/TILE_ATTRIBUTION abaixo.) Os tiles do OSM também enviam
+// cabeçalho CORS liberado, necessário para poder ler o mapa de volta via
+// <canvas> (crossOrigin) no exportador de vídeo/relatório.
+//
+// Suporta múltiplos casos simultâneos no mesmo mapa (cada um com sua própria
+// camada/cor), para comparar rastros e localizar possíveis conexões entre
+// monitorados.
 import { formatDateTime, formatCoord } from "../util/format.js";
 
-export const TILE_URL = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
-export const TILE_SUBDOMAINS = "abcd";
+export const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+export const TILE_SUBDOMAINS = "abc";
 const TILE_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 export class MapView {
   constructor(containerId) {
@@ -17,71 +23,84 @@ export class MapView {
     L.tileLayer(TILE_URL, {
       attribution: TILE_ATTRIBUTION,
       subdomains: TILE_SUBDOMAINS,
-      maxZoom: 20,
+      maxZoom: 19,
       crossOrigin: true,
     }).addTo(this.map);
     this.map.setView([-15.78, -47.93], 4);
 
-    this.pathLayer = L.polyline([], { color: "#1e3a5f", weight: 3, opacity: 0.7 }).addTo(this.map);
-    this.markersLayer = L.layerGroup().addTo(this.map);
-    this.anomalyLayer = L.layerGroup().addTo(this.map);
-    this.zoneLayer = L.layerGroup().addTo(this.map);
+    this.caseLayers = new Map(); // caseId -> { group, pathLayer, markersLayer, anomalyLayer, zoneLayer }
     this.cursorMarker = null;
   }
 
-  setRecords(records, onSelect) {
-    this.markersLayer.clearLayers();
+  _ensureCase(caseId) {
+    let entry = this.caseLayers.get(caseId);
+    if (!entry) {
+      const group = L.layerGroup();
+      entry = {
+        group,
+        pathLayer: L.polyline([]).addTo(group),
+        markersLayer: L.layerGroup().addTo(group),
+        anomalyLayer: L.layerGroup().addTo(group),
+        zoneLayer: L.layerGroup().addTo(group),
+      };
+      this.caseLayers.set(caseId, entry);
+    }
+    return entry;
+  }
+
+  /** (Re)desenha o trajeto, marcadores e zona de exclusão de um caso. */
+  setCase(caseId, { records, color, zone, visible, label, onSelect }) {
+    const entry = this._ensureCase(caseId);
+    entry.pathLayer.setStyle({ color, weight: 3, opacity: 0.7 });
+    entry.markersLayer.clearLayers();
+
     const latlngs = [];
     for (const r of records) {
       latlngs.push([r.lat, r.lon]);
       const violation = !!r.isViolation;
       const marker = L.circleMarker([r.lat, r.lon], {
         radius: violation ? 6 : 5,
-        color: violation ? "#a83431" : "#1e3a5f",
-        fillColor: violation ? "#d9534f" : "#4cafd9",
+        color: violation ? "#a83431" : color,
+        fillColor: violation ? "#d9534f" : color,
         fillOpacity: 0.9,
         weight: 1,
       });
-      marker.bindPopup(popupHtml(r));
+      marker.bindPopup(popupHtml(r, label));
       if (onSelect) marker.on("click", () => onSelect(r));
-      marker.addTo(this.markersLayer);
+      marker.addTo(entry.markersLayer);
     }
-    this.pathLayer.setLatLngs(latlngs);
-    if (latlngs.length > 0) {
-      this.map.fitBounds(latlngs, { padding: [30, 30], maxZoom: 15 });
+    entry.pathLayer.setLatLngs(latlngs);
+
+    entry.zoneLayer.clearLayers();
+    if (zone && zone.lat != null && zone.lon != null && zone.radiusM) {
+      L.circle([zone.lat, zone.lon], {
+        radius: zone.radiusM,
+        color,
+        weight: 2,
+        fillColor: color,
+        fillOpacity: 0.08,
+        dashArray: "4 4",
+      })
+        .bindTooltip(
+          `Zona de exclusão${label ? ` (${label})` : ""} — raio ${zone.radiusM.toFixed(0)} m` +
+            (zone.address ? ` — ${zone.address}` : "")
+        )
+        .addTo(entry.zoneLayer);
+      L.circleMarker([zone.lat, zone.lon], {
+        radius: 4,
+        color,
+        fillColor: color,
+        fillOpacity: 1,
+        weight: 1,
+      }).addTo(entry.zoneLayer);
     }
+
+    this.setCaseVisible(caseId, visible !== false);
   }
 
-  /** @param {{lat:number, lon:number, radiusM:number, address?:string} | null} zone */
-  setExclusionZone(zone) {
-    this.zoneLayer.clearLayers();
-    if (!zone || zone.lat == null || zone.lon == null || !zone.radiusM) return;
-    const circle = L.circle([zone.lat, zone.lon], {
-      radius: zone.radiusM,
-      color: "#d9534f",
-      weight: 2,
-      fillColor: "#d9534f",
-      fillOpacity: 0.08,
-      dashArray: "4 4",
-    }).bindTooltip(
-      `Zona de exclusão (raio ${zone.radiusM.toFixed(0)} m)` + (zone.address ? ` — ${zone.address}` : "")
-    );
-    circle.addTo(this.zoneLayer);
-    L.circleMarker([zone.lat, zone.lon], {
-      radius: 4,
-      color: "#a83431",
-      fillColor: "#d9534f",
-      fillOpacity: 1,
-      weight: 1,
-    }).addTo(this.zoneLayer);
-
-    if (this.markersLayer.getLayers().length === 0) {
-      this.map.fitBounds(circle.getBounds(), { padding: [30, 30], maxZoom: 15 });
-    }
-  }
-
-  setAnomalies(anomalies) {
-    this.anomalyLayer.clearLayers();
+  setCaseAnomalies(caseId, anomalies) {
+    const entry = this._ensureCase(caseId);
+    entry.anomalyLayer.clearLayers();
     for (const a of anomalies) {
       L.polyline(
         [
@@ -94,8 +113,43 @@ export class MapView {
           `Deslocamento implausível: ${a.distanceKm.toFixed(1)} km em ${a.hours.toFixed(2)} h ` +
             `(${a.speedKmh.toFixed(0)} km/h)`
         )
-        .addTo(this.anomalyLayer);
+        .addTo(entry.anomalyLayer);
     }
+  }
+
+  setCaseVisible(caseId, visible) {
+    const entry = this.caseLayers.get(caseId);
+    if (!entry) return;
+    const onMap = this.map.hasLayer(entry.group);
+    if (visible && !onMap) entry.group.addTo(this.map);
+    else if (!visible && onMap) this.map.removeLayer(entry.group);
+  }
+
+  removeCase(caseId) {
+    const entry = this.caseLayers.get(caseId);
+    if (!entry) return;
+    this.map.removeLayer(entry.group);
+    this.caseLayers.delete(caseId);
+  }
+
+  /** Ajusta o zoom/centro para enquadrar todos os casos atualmente visíveis. */
+  fitToVisible() {
+    const bounds = L.latLngBounds([]);
+    let has = false;
+    for (const entry of this.caseLayers.values()) {
+      if (!this.map.hasLayer(entry.group)) continue;
+      for (const marker of entry.markersLayer.getLayers()) {
+        bounds.extend(marker.getLatLng());
+        has = true;
+      }
+      for (const layer of entry.zoneLayer.getLayers()) {
+        if (typeof layer.getBounds === "function") {
+          bounds.extend(layer.getBounds());
+          has = true;
+        }
+      }
+    }
+    if (has) this.map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
   }
 
   setCursor(latlng) {
@@ -119,8 +173,8 @@ export class MapView {
     }
   }
 
-  fitToLatLngs(latlngs) {
-    if (latlngs.length > 0) this.map.fitBounds(latlngs, { padding: [30, 30], maxZoom: 15 });
+  panTo(latlng) {
+    this.map.panTo(latlng, { animate: true });
   }
 
   getContainer() {
@@ -136,8 +190,10 @@ export class MapView {
   }
 }
 
-function popupHtml(r) {
-  const lines = [`<strong>${formatDateTime(r.createdAt)}</strong>`];
+function popupHtml(r, label) {
+  const lines = [];
+  if (label) lines.push(`<em>${escapeHtml(label)}</em>`);
+  lines.push(`<strong>${formatDateTime(r.createdAt)}</strong>`);
   if (r.status) {
     const color = r.isViolation ? "#d9534f" : "#1e3a5f";
     lines.push(`<span style="color:${color}; font-weight:600;">${escapeHtml(r.status)}</span>`);
