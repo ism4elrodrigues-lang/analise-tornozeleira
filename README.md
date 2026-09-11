@@ -13,6 +13,10 @@ coordenadas — ao clicar, apenas aquele IP é enviado ao serviço externo
 [ipapi.co](https://ipapi.co) para obter uma localização aproximada. Nada
 acontece automaticamente.
 
+Anotações, fotos e pontos de interesse também ficam só na memória da aba —
+não são salvos em disco nem persistem se a aba for fechada. Se quiser manter
+o que anotou, exporte o relatório (PDF/imagem) antes de fechar.
+
 ## Instalação (modo desenvolvedor)
 
 1. Abra `chrome://extensions` no Chrome.
@@ -50,8 +54,25 @@ acontece automaticamente.
 9. "Gerar vídeo do deslocamento" grava a animação do caso ativo como
    `.webm`, desenhando também o círculo da zona de exclusão quando houver.
 10. "Exportar relatório (PDF/imagem)" gera um resumo do caso ativo com
-    cabeçalho, mapa, contagens e a lista de violações/anomalias, para anexar
-    a despacho/relatório.
+    cabeçalho, mapa, contagens, lista de violações/anomalias, narrativa
+    automática e anotações (texto e fotos), para anexar a despacho/relatório.
+11. Em eventos, violações e possíveis encontros há um botão **"+ nota"** para
+    anexar uma anotação de texto e/ou foto (com uma anotação simples em cima —
+    caneta ou texto) — útil para registrar confirmações, dúvidas ou evidência
+    visual. Um painel **"Anotações"** no fim da página reúne todas, com
+    editar/remover.
+12. **"Pontos de interesse"**: marque manualmente um local (endereço da
+    vítima, do crime etc.) clicando em "+ Adicionar ponto de interesse" e
+    depois no mapa — fica visível independente do caso ativo, para comparar
+    com o rastro.
+13. **"Narrativa automática"**: monta um rascunho cronológico em texto a
+    partir das violações, anomalias, encontros e anotações do caso ativo —
+    "Gerar narrativa" e "Copiar" para colar num relatório/despacho.
+14. **"Locais frequentes (padrão de vida)"**: agrupa por proximidade os
+    pontos do caso ativo visitados repetidamente, com uma heurística simples
+    de horário (predomínio noturno → possível residência; predomínio diurno
+    em dia útil → possível trabalho) — é um indício, não uma identificação
+    confirmada, por isso também aceita anotação.
 
 ## Formatos de entrada suportados
 
@@ -137,6 +158,9 @@ src/map/                Mapa (Leaflet), zona de exclusão e captura de tiles par
 src/timeline/           Linha do tempo (canvas)
 src/playback/           Controlador de reprodução/animação
 src/anomalies/          Detecção de velocidade implausível, violação de zona e conexões entre casos
+src/annotations/        Anotações (texto/foto) em memória + modal de nota + editor de foto
+src/patterns/           Detecção de locais frequentes (padrão de vida)
+src/narrative/          Narrativa automática em texto a partir do que foi calculado
 src/report/             Exportação de vídeo e relatório (PDF/imagem)
 src/ipgeo/              Geolocalização por IP (opt-in)
 lib/                    Bibliotecas de terceiros vendorizadas (Leaflet, PapaParse, pdf.js, SheetJS, jsPDF)

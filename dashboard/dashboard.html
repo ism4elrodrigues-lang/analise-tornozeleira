@@ -37,6 +37,15 @@
     <ul id="cases-list" class="cases-list"></ul>
   </section>
 
+  <section id="poi-section" class="cases-panel">
+    <div class="poi-header">
+      <h2>Pontos de interesse</h2>
+      <button id="add-poi-btn">+ Adicionar ponto de interesse</button>
+    </div>
+    <p class="hint">Marque manualmente um local de referência (endereço da vítima, do crime etc.) para comparar com o rastro no mapa.</p>
+    <ul id="poi-list" class="cases-list"></ul>
+  </section>
+
   <section id="case-header" class="case-header" hidden>
     <div class="case-header-grid">
       <div><strong id="case-name">-</strong><br /><span id="case-subtitle" class="case-subtitle"></span></div>
@@ -94,6 +103,18 @@
     <ul id="connections-list" class="anomalies-list"></ul>
   </section>
 
+  <section id="narrative-section" class="connections-panel">
+    <div class="poi-header">
+      <h2>Narrativa automática (caso ativo)</h2>
+      <div class="narrative-actions">
+        <button id="generate-narrative-btn" disabled>Gerar narrativa</button>
+        <button id="copy-narrative-btn" disabled>Copiar</button>
+      </div>
+    </div>
+    <p class="hint">Rascunho cronológico a partir de violações, anomalias, encontros e anotações — revise antes de usar.</p>
+    <textarea id="narrative-text" class="narrative-textarea" readonly placeholder="Clique em &quot;Gerar narrativa&quot; para montar o rascunho do caso ativo."></textarea>
+  </section>
+
   <section class="lower-grid">
     <div class="anomalies-panel">
       <div id="zone-violations-block">
@@ -105,6 +126,11 @@
         <h2>Anomalias de deslocamento</h2>
         <p class="hint">Trechos do caso ativo com velocidade implausível entre dois pontos consecutivos (possível burla/falha do dispositivo).</p>
         <ul id="anomalies-list" class="anomalies-list"></ul>
+      </div>
+      <div id="frequent-places-block">
+        <h2>Locais frequentes (padrão de vida)</h2>
+        <p class="hint">Locais visitados repetidamente pelo caso ativo — indício, não identificação confirmada.</p>
+        <ul id="frequent-places-list" class="anomalies-list"></ul>
       </div>
     </div>
     <div class="records-panel">
@@ -125,6 +151,12 @@
         </table>
       </div>
     </div>
+  </section>
+
+  <section id="annotations-section" class="connections-panel">
+    <h2>Anotações (texto e fotos)</h2>
+    <p class="hint">Todas as anotações feitas em eventos, violações, encontros e pontos de interesse, de todos os casos.</p>
+    <ul id="annotations-list" class="annotations-list"></ul>
   </section>
 
   <script src="../lib/leaflet/leaflet.js"></script>

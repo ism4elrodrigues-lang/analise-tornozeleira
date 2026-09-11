@@ -12,6 +12,22 @@ import { exportVideo } from "../src/report/videoExporter.js";
 import { exportReportPdf, exportReportImage } from "../src/report/reportExporter.js";
 import { lookupIp } from "../src/ipgeo/ipGeolocation.js";
 import { formatDateTime, toDatetimeLocalValue, parseDatetimeLocal } from "../src/util/format.js";
+import {
+  buildRecordKey,
+  buildViolationKey,
+  buildConnectionKey,
+  buildPlaceKey,
+  buildPoiKey,
+  getAnnotation,
+  hasAnnotation,
+  setAnnotation,
+  deleteAnnotation,
+  listAnnotations,
+  listAnnotationsForCase,
+} from "../src/annotations/annotationStore.js";
+import { openNoteModal } from "../src/annotations/noteModal.js";
+import { detectFrequentPlaces } from "../src/patterns/frequentPlaces.js";
+import { buildNarrative } from "../src/narrative/narrativeBuilder.js";
 
 const CASE_COLORS = ["#1e3a5f", "#2e8b57", "#b8860b", "#6a5acd", "#c2185b", "#00838f", "#8d6e63", "#5d4037"];
 
@@ -46,8 +62,15 @@ const connectionsList = el("connections-list");
 const zoneViolationsBlock = el("zone-violations-block");
 const zoneViolationsList = el("zone-violations-list");
 const anomaliesList = el("anomalies-list");
+const frequentPlacesList = el("frequent-places-list");
 const recordsCount = el("records-count");
 const recordsTbody = el("records-tbody");
+const addPoiBtn = el("add-poi-btn");
+const poiList = el("poi-list");
+const generateNarrativeBtn = el("generate-narrative-btn");
+const copyNarrativeBtn = el("copy-narrative-btn");
+const narrativeText = el("narrative-text");
+const annotationsListEl = el("annotations-list");
 
 const mapView = new MapView("map");
 const timelineView = new TimelineView(el("timeline"));
@@ -58,6 +81,10 @@ let activeCaseId = null;
 let caseSeq = 0;
 let colorSeq = 0;
 let scrubbing = false;
+let pois = [];
+let poiSeq = 0;
+let poiPlacementMode = false;
+let lastConnections = [];
 
 function caseLabel(c) {
   return c.caseMeta?.name || c.fileName;
@@ -273,6 +300,254 @@ function renderCaseHeader() {
   if (legal.issuedAt) caseLegal.appendChild(labelLine("Relatório emitido em", legal.issuedAt));
 }
 
+// --- Anotações (texto/foto) reutilizáveis em eventos, violações, encontros, locais e POIs ---
+
+function makeNoteButton(key, ctx, onSaved) {
+  const btn = document.createElement("button");
+  btn.className = "note-btn" + (hasAnnotation(key) ? " has-annotation" : "");
+  btn.textContent = hasAnnotation(key) ? "📝 nota" : "+ nota";
+  btn.title = "Anotação (texto/foto)";
+  btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const existing = getAnnotation(key);
+    const result = await openNoteModal({
+      title: `Anotação — ${ctx.targetLabel}`,
+      initialText: existing?.text || "",
+      initialPhoto: existing?.photoDataUrl || null,
+      allowDelete: !!existing,
+    });
+    if (result === null) return;
+    if (!result.text.trim() && !result.photoDataUrl) {
+      deleteAnnotation(key);
+    } else {
+      setAnnotation(key, { ...ctx, text: result.text, photoDataUrl: result.photoDataUrl });
+    }
+    if (onSaved) onSaved();
+    renderAnnotations();
+  });
+  return btn;
+}
+
+function targetTypeLabel(t) {
+  return (
+    { record: "Evento", violation: "Violação de zona", connection: "Possível encontro", place: "Local frequente", poi: "Ponto de interesse" }[
+      t
+    ] || t
+  );
+}
+
+function renderAnnotations() {
+  const anns = listAnnotations();
+  annotationsListEl.innerHTML = "";
+  if (anns.length === 0) {
+    const li = document.createElement("li");
+    li.className = "annotation-row";
+    li.textContent = "Nenhuma anotação ainda.";
+    annotationsListEl.appendChild(li);
+    return;
+  }
+  for (const a of anns) {
+    const li = document.createElement("li");
+    li.className = "annotation-row";
+    if (a.photoDataUrl) {
+      const img = document.createElement("img");
+      img.className = "annotation-thumb";
+      img.src = a.photoDataUrl;
+      li.appendChild(img);
+    }
+    const body = document.createElement("div");
+    body.className = "annotation-body";
+    const target = document.createElement("div");
+    target.className = "annotation-target";
+    target.textContent = `${targetTypeLabel(a.targetType)}${a.targetLabel ? ` — ${a.targetLabel}` : ""}`;
+    body.appendChild(target);
+    if (a.text) {
+      const text = document.createElement("div");
+      text.className = "annotation-text";
+      text.textContent = a.text;
+      body.appendChild(text);
+    }
+    li.appendChild(body);
+
+    const actions = document.createElement("div");
+    actions.className = "annotation-actions";
+    const editBtn = document.createElement("button");
+    editBtn.textContent = "Editar";
+    editBtn.addEventListener("click", async () => {
+      const result = await openNoteModal({
+        title: `Anotação — ${a.targetLabel}`,
+        initialText: a.text,
+        initialPhoto: a.photoDataUrl,
+        allowDelete: true,
+      });
+      if (result === null) return;
+      if (!result.text.trim() && !result.photoDataUrl) deleteAnnotation(a.key);
+      else setAnnotation(a.key, { ...a, text: result.text, photoDataUrl: result.photoDataUrl });
+      if (a.targetType === "poi") renderPois();
+      renderAnnotations();
+      render();
+    });
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "case-remove-btn";
+    removeBtn.textContent = "Remover";
+    removeBtn.addEventListener("click", () => {
+      deleteAnnotation(a.key);
+      if (a.targetType === "poi") {
+        pois = pois.filter((p) => buildPoiKey(p.id) !== a.key);
+        renderPois();
+      }
+      renderAnnotations();
+      render();
+    });
+    actions.append(editBtn, removeBtn);
+    li.appendChild(actions);
+    annotationsListEl.appendChild(li);
+  }
+}
+
+// --- Pontos de interesse (manuais, globais) ---
+
+addPoiBtn.addEventListener("click", () => {
+  poiPlacementMode = !poiPlacementMode;
+  addPoiBtn.textContent = poiPlacementMode ? "Clique no mapa para posicionar..." : "+ Adicionar ponto de interesse";
+  mapView.setClickToPlaceMode(poiPlacementMode, poiPlacementMode ? handleMapClickForPoi : null);
+});
+
+async function handleMapClickForPoi(latlng) {
+  poiPlacementMode = false;
+  addPoiBtn.textContent = "+ Adicionar ponto de interesse";
+  mapView.setClickToPlaceMode(false, null);
+
+  const result = await openNoteModal({ title: "Novo ponto de interesse" });
+  if (!result || (!result.text.trim() && !result.photoDataUrl)) return;
+
+  const poi = { id: `poi-${poiSeq++}`, lat: latlng.lat, lon: latlng.lng };
+  pois.push(poi);
+  setAnnotation(buildPoiKey(poi.id), {
+    caseId: null,
+    targetType: "poi",
+    targetLabel: "Ponto de interesse",
+    time: null,
+    text: result.text,
+    photoDataUrl: result.photoDataUrl,
+  });
+  renderPois();
+  renderAnnotations();
+}
+
+function poiLabel(poi) {
+  const ann = getAnnotation(buildPoiKey(poi.id));
+  const firstLine = ann?.text?.split("\n")[0]?.trim();
+  return firstLine || "Ponto de interesse";
+}
+
+function renderPois() {
+  mapView.setPois(
+    pois.map((p) => ({ ...p, label: poiLabel(p) })),
+    (p) => mapView.panTo([p.lat, p.lon])
+  );
+
+  poiList.innerHTML = "";
+  if (pois.length === 0) {
+    const li = document.createElement("li");
+    li.className = "case-row";
+    li.textContent = "Nenhum ponto de interesse marcado.";
+    poiList.appendChild(li);
+    return;
+  }
+  for (const p of pois) {
+    const li = document.createElement("li");
+    li.className = "case-row";
+
+    const info = document.createElement("div");
+    info.className = "case-row-info";
+    const name = document.createElement("div");
+    name.className = "case-row-name";
+    name.textContent = poiLabel(p);
+    info.appendChild(name);
+
+    const actions = document.createElement("div");
+    actions.className = "case-row-actions";
+    const key = buildPoiKey(p.id);
+    actions.appendChild(
+      makeNoteButton(key, { caseId: null, targetType: "poi", targetLabel: "Ponto de interesse", time: null }, () => renderPois())
+    );
+    const goBtn = document.createElement("button");
+    goBtn.textContent = "Ver no mapa";
+    goBtn.addEventListener("click", () => mapView.panTo([p.lat, p.lon]));
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "case-remove-btn";
+    removeBtn.textContent = "Remover";
+    removeBtn.addEventListener("click", () => {
+      pois = pois.filter((x) => x.id !== p.id);
+      deleteAnnotation(key);
+      renderPois();
+      renderAnnotations();
+    });
+    actions.append(goBtn, removeBtn);
+
+    li.append(info, actions);
+    poiList.appendChild(li);
+  }
+}
+
+// --- Locais frequentes (padrão de vida) ---
+
+function renderFrequentPlacesList(active) {
+  const places = active?.frequentPlaces || [];
+  frequentPlacesList.innerHTML = "";
+  if (places.length === 0) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = "Nenhum local frequente identificado no intervalo selecionado.";
+    frequentPlacesList.appendChild(li);
+    return;
+  }
+  places.forEach((p) => {
+    const li = document.createElement("li");
+    const span = document.createElement("span");
+    span.className = "anomaly-text";
+    span.style.color = "var(--navy)";
+    const durationTxt =
+      p.totalDurationMin < 60 ? `${Math.round(p.totalDurationMin)} min` : `${(p.totalDurationMin / 60).toFixed(1)} h`;
+    span.textContent =
+      `${p.label} — ${durationTxt} em ${p.visitCount} visita(s), ${p.daysCount} dia(s)` + (p.address ? ` — ${p.address}` : "");
+    span.addEventListener("click", () => mapView.panTo([p.lat, p.lon]));
+    const key = buildPlaceKey(active.id, p.lat, p.lon);
+    const noteBtn = makeNoteButton(key, { caseId: active.id, targetType: "place", targetLabel: p.label, time: null }, () => render());
+    li.append(span, noteBtn);
+    frequentPlacesList.appendChild(li);
+  });
+}
+
+// --- Narrativa automática ---
+
+generateNarrativeBtn.addEventListener("click", () => {
+  const active = getActiveCase();
+  if (!active) return;
+  narrativeText.value = buildNarrativeForCase(active);
+  copyNarrativeBtn.disabled = false;
+});
+
+copyNarrativeBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(narrativeText.value);
+    copyNarrativeBtn.textContent = "Copiado!";
+    setTimeout(() => (copyNarrativeBtn.textContent = "Copiar"), 1500);
+  } catch (err) {
+    console.error(err);
+    alert("Não foi possível copiar automaticamente. Selecione o texto manualmente.");
+  }
+});
+
+function buildNarrativeForCase(active) {
+  const connectionsForCase = lastConnections.filter((c) => c.caseAId === active.id || c.caseBId === active.id);
+  const notesForCase = listAnnotationsForCase(active.id)
+    .filter((a) => (a.targetType === "record" || a.targetType === "violation") && a.text)
+    .map((a) => ({ time: a.time, text: a.text, targetLabel: a.targetLabel }));
+  return buildNarrative(active, connectionsForCase, notesForCase);
+}
+
 function labelLine(label, value) {
   const div = document.createElement("div");
   const strong = document.createElement("strong");
@@ -292,11 +567,16 @@ function render() {
     connectionsSection.hidden = true;
     zoneViolationsBlock.hidden = true;
     anomaliesList.innerHTML = "";
+    frequentPlacesList.innerHTML = "";
     recordsTbody.innerHTML = "";
     recordsCount.textContent = "0";
     statsBox.innerHTML = "";
+    generateNarrativeBtn.disabled = true;
+    copyNarrativeBtn.disabled = true;
+    narrativeText.value = "";
     playback.setRecords([]);
     updatePlaybackControls();
+    renderAnnotations();
     return;
   }
 
@@ -326,6 +606,12 @@ function render() {
       onSelect: (r) => onRecordSelect(c.id, r),
     });
     mapView.setCaseAnomalies(c.id, c.speedAnomalies);
+
+    // Locais frequentes só são calculados/exibidos para o caso ativo, para não
+    // poluir o mapa com marcadores de todos os casos visíveis ao mesmo tempo.
+    const isActive = c.id === activeCaseId;
+    if (isActive) c.frequentPlaces = detectFrequentPlaces(c.geoRecords);
+    mapView.setCasePlaces(c.id, isActive ? c.frequentPlaces || [] : [], (p) => mapView.panTo([p.lat, p.lon]));
   }
 
   timelineView.setCases(
@@ -353,8 +639,13 @@ function render() {
   zoneViolationsBlock.hidden = !showZoneBlock;
   if (showZoneBlock) renderZoneViolations(active);
   renderSpeedAnomalies(active);
+  renderFrequentPlacesList(active);
   renderTable(active);
   renderCasesMenu();
+  renderAnnotations();
+
+  generateNarrativeBtn.disabled = !active;
+  copyNarrativeBtn.disabled = !active || !narrativeText.value;
 }
 
 function renderConnections() {
@@ -365,6 +656,7 @@ function renderConnections() {
   }
   const inputs = visible.map((c) => ({ id: c.id, label: caseLabel(c), records: c.filteredRecords }));
   const connections = detectAllConnections(inputs);
+  lastConnections = connections;
 
   connectionsSection.hidden = false;
   connectionsList.innerHTML = "";
@@ -377,14 +669,23 @@ function renderConnections() {
   }
   for (const conn of connections) {
     const li = document.createElement("li");
-    li.textContent =
+    const span = document.createElement("span");
+    span.className = "anomaly-text";
+    span.textContent =
       `${conn.caseALabel} ↔ ${conn.caseBLabel}: ${formatDateTime(conn.start)} → ${formatDateTime(conn.end)}` +
       ` — mín. ${conn.minDistanceM.toFixed(0)} m de distância`;
-    li.addEventListener("click", () => {
+    span.addEventListener("click", () => {
       mapView.setCursor([conn.lat, conn.lon]);
       mapView.panTo([conn.lat, conn.lon]);
       timelineView.setCursorTime(conn.start);
     });
+    const key = buildConnectionKey(conn.caseAId, conn.caseBId, conn.start.getTime());
+    const noteBtn = makeNoteButton(
+      key,
+      { caseId: null, targetType: "connection", targetLabel: `${conn.caseALabel} ↔ ${conn.caseBLabel}`, time: conn.start },
+      () => render()
+    );
+    li.append(span, noteBtn);
     connectionsList.appendChild(li);
   }
 }
@@ -427,8 +728,17 @@ function renderZoneViolations(active) {
     const durationTxt = ep.durationMin < 1 ? "menos de 1 min" : `${Math.round(ep.durationMin)} min`;
     const distTxt = ep.minDistanceM != null ? ` — mín. ${ep.minDistanceM.toFixed(0)} m da referência` : "";
     const addrTxt = ep.addresses.length > 0 ? ` (${ep.addresses[0]})` : "";
-    li.textContent = `${formatDateTime(ep.start)} → ${formatDateTime(ep.end)} (${durationTxt})${distTxt}${addrTxt}`;
-    li.addEventListener("click", () => onRecordSelect(active.id, ep.records[0]));
+    const span = document.createElement("span");
+    span.className = "anomaly-text";
+    span.textContent = `${formatDateTime(ep.start)} → ${formatDateTime(ep.end)} (${durationTxt})${distTxt}${addrTxt}`;
+    span.addEventListener("click", () => onRecordSelect(active.id, ep.records[0]));
+    const key = buildViolationKey(active.id, ep.start.getTime());
+    const noteBtn = makeNoteButton(
+      key,
+      { caseId: active.id, targetType: "violation", targetLabel: `Violação ${formatDateTime(ep.start)}`, time: ep.start },
+      () => render()
+    );
+    li.append(span, noteBtn);
     zoneViolationsList.appendChild(li);
   }
 }
@@ -444,10 +754,13 @@ function renderSpeedAnomalies(active) {
   }
   for (const a of active.speedAnomalies) {
     const li = document.createElement("li");
-    li.textContent = `${formatDateTime(a.from.createdAt)} → ${formatDateTime(a.to.createdAt)}: ${a.distanceKm.toFixed(
+    const span = document.createElement("span");
+    span.className = "anomaly-text";
+    span.textContent = `${formatDateTime(a.from.createdAt)} → ${formatDateTime(a.to.createdAt)}: ${a.distanceKm.toFixed(
       1
     )} km em ${a.hours.toFixed(2)} h (${a.speedKmh.toFixed(0)} km/h)`;
-    li.addEventListener("click", () => onRecordSelect(active.id, a.to));
+    span.addEventListener("click", () => onRecordSelect(active.id, a.to));
+    li.appendChild(span);
     anomaliesList.appendChild(li);
   }
 }
@@ -492,6 +805,13 @@ function renderTable(active) {
       });
       actionTd.appendChild(btn);
     }
+    actionTd.appendChild(
+      makeNoteButton(
+        buildRecordKey(r.id),
+        { caseId: active.id, targetType: "record", targetLabel: formatDateTime(r.createdAt), time: r.createdAt },
+        () => render()
+      )
+    );
     tr.appendChild(actionTd);
     frag.appendChild(tr);
   }
@@ -595,6 +915,8 @@ exportPdfBtn.addEventListener("click", async () => {
       zoneEpisodes: active.zoneEpisodes,
       caseMeta: active.caseMeta,
       meta: buildMeta(active),
+      narrativeText: buildNarrativeForCase(active),
+      annotations: listAnnotationsForCase(active.id),
     });
   } catch (err) {
     console.error(err);
@@ -616,6 +938,7 @@ exportImageBtn.addEventListener("click", async () => {
       zoneEpisodes: active.zoneEpisodes,
       caseMeta: active.caseMeta,
       meta: buildMeta(active),
+      narrativeText: buildNarrativeForCase(active),
     });
   } catch (err) {
     console.error(err);
@@ -640,3 +963,6 @@ function buildMeta(active) {
 }
 
 window.addEventListener("resize", () => mapView.invalidateSize());
+
+renderPois();
+renderAnnotations();

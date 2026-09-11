@@ -28,8 +28,9 @@ export class MapView {
     }).addTo(this.map);
     this.map.setView([-15.78, -47.93], 4);
 
-    this.caseLayers = new Map(); // caseId -> { group, pathLayer, markersLayer, anomalyLayer, zoneLayer }
+    this.caseLayers = new Map(); // caseId -> { group, pathLayer, markersLayer, anomalyLayer, zoneLayer, placesLayer }
     this.cursorMarker = null;
+    this.poiLayer = L.layerGroup().addTo(this.map);
   }
 
   _ensureCase(caseId) {
@@ -42,6 +43,7 @@ export class MapView {
         markersLayer: L.layerGroup().addTo(group),
         anomalyLayer: L.layerGroup().addTo(group),
         zoneLayer: L.layerGroup().addTo(group),
+        placesLayer: L.layerGroup().addTo(group),
       };
       this.caseLayers.set(caseId, entry);
     }
@@ -114,6 +116,54 @@ export class MapView {
             `(${a.speedKmh.toFixed(0)} km/h)`
         )
         .addTo(entry.anomalyLayer);
+    }
+  }
+
+  /** Desenha os locais frequentes (padrão de vida) detectados para um caso. */
+  setCasePlaces(caseId, places, onSelect) {
+    const entry = this._ensureCase(caseId);
+    entry.placesLayer.clearLayers();
+    for (const p of places) {
+      const marker = L.marker([p.lat, p.lon], {
+        icon: L.divIcon({
+          html: '<span class="place-marker-icon">⭐</span>',
+          className: "place-marker",
+          iconSize: [20, 20],
+          iconAnchor: [10, 18],
+        }),
+      }).bindTooltip(`${p.label}${p.address ? ` — ${p.address}` : ""}`);
+      if (onSelect) marker.on("click", () => onSelect(p));
+      marker.addTo(entry.placesLayer);
+    }
+  }
+
+  /** Pontos de interesse marcados manualmente (globais, não ligados a um caso). */
+  setPois(pois, onSelect) {
+    this.poiLayer.clearLayers();
+    for (const p of pois) {
+      const marker = L.marker([p.lat, p.lon], {
+        icon: L.divIcon({
+          html: '<span class="poi-marker-icon">📍</span>',
+          className: "poi-marker",
+          iconSize: [22, 22],
+          iconAnchor: [11, 20],
+        }),
+      }).bindTooltip(p.label || "Ponto de interesse");
+      if (onSelect) marker.on("click", () => onSelect(p));
+      marker.addTo(this.poiLayer);
+    }
+  }
+
+  /** Ativa/desativa um modo em que o próximo clique no mapa chama `handler(latlng)` uma vez. */
+  setClickToPlaceMode(active, handler) {
+    if (this._placeClickHandler) {
+      this.map.off("click", this._placeClickHandler);
+      this._placeClickHandler = null;
+    }
+    this.getContainer().style.cursor = active ? "crosshair" : "";
+    if (active && handler) {
+      this._placeClickHandler = (e) => handler(e.latlng);
+      this.map.on("click", this._placeClickHandler);
     }
   }
 

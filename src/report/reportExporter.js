@@ -118,7 +118,28 @@ function anomalyLine(a) {
   )} km em ${a.hours.toFixed(2)} h (${a.speedKmh.toFixed(0)} km/h)`;
 }
 
-export async function exportReportPdf({ mapView, geoRecords, anomalies, zoneEpisodes, caseMeta, meta }) {
+const TARGET_TYPE_LABEL = {
+  record: "Evento",
+  violation: "Violação de zona",
+  place: "Local frequente",
+  poi: "Ponto de interesse",
+  connection: "Possível encontro",
+};
+
+function annotationTextLine(a) {
+  const kind = TARGET_TYPE_LABEL[a.targetType] || a.targetType;
+  return `[${kind}${a.targetLabel ? ` — ${a.targetLabel}` : ""}] ${a.text}`;
+}
+
+function imageDimensions(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.width, height: img.height });
+    img.src = dataUrl;
+  });
+}
+
+export async function exportReportPdf({ mapView, geoRecords, anomalies, zoneEpisodes, caseMeta, meta, narrativeText, annotations }) {
   if (typeof window.jspdf === "undefined") {
     throw new Error("Biblioteca jsPDF não carregada.");
   }
@@ -181,16 +202,68 @@ export async function exportReportPdf({ mapView, geoRecords, anomalies, zoneEpis
   }
   addSection("Anomalias de deslocamento (velocidade implausível)", anomalies.map(anomalyLine));
 
+  if (narrativeText) {
+    addSection("Narrativa automática", doc.splitTextToSize(narrativeText, pageWidth - margin * 2));
+  }
+
+  const textAnnotations = (annotations || []).filter((a) => a.text);
+  if (textAnnotations.length > 0) {
+    addSection("Anotações do investigador", textAnnotations.map(annotationTextLine));
+  }
+
+  const photoAnnotations = (annotations || []).filter((a) => a.photoDataUrl).slice(0, 12);
+  const maxImgW = pageWidth - margin * 2;
+  for (const a of photoAnnotations) {
+    if (y > pageHeight - 160) {
+      doc.addPage();
+      y = margin;
+    }
+    doc.setFont(undefined, "bold");
+    doc.setFontSize(10);
+    const kind = TARGET_TYPE_LABEL[a.targetType] || a.targetType;
+    doc.text(`Foto — ${kind}${a.targetLabel ? ` (${a.targetLabel})` : ""}`, margin, y);
+    y += 14;
+
+    const dims = await imageDimensions(a.photoDataUrl);
+    const w = Math.min(maxImgW, dims.width);
+    const h = (dims.height / dims.width) * w;
+    if (y + h > pageHeight - margin) {
+      doc.addPage();
+      y = margin;
+    }
+    doc.addImage(a.photoDataUrl, "PNG", margin, y, w, h);
+    y += h + 10;
+
+    if (a.text) {
+      doc.setFont(undefined, "normal");
+      doc.setFontSize(9);
+      for (const line of doc.splitTextToSize(a.text, maxImgW)) {
+        if (y > pageHeight - margin) {
+          doc.addPage();
+          y = margin;
+        }
+        doc.text(line, margin, y);
+        y += 12;
+      }
+      y += 6;
+    }
+  }
+
   doc.save(`relatorio_analise_${Date.now()}.pdf`);
 }
 
-export async function exportReportImage({ mapView, geoRecords, anomalies, zoneEpisodes, caseMeta, meta }) {
+export async function exportReportImage({ mapView, geoRecords, anomalies, zoneEpisodes, caseMeta, meta, narrativeText }) {
   const hasZone = zoneEpisodesGiven(zoneEpisodes) && caseMeta?.zone?.lat != null;
   const mapCanvas = await captureMapImage(mapView, geoRecords, anomalies, hasZone ? caseMeta.zone : null);
 
   const headerLines = [...caseLines(caseMeta, meta), ...summaryLine(meta, hasZone ? zoneEpisodes : null)];
   const episodeLines = hasZone && zoneEpisodes.length > 0 ? zoneEpisodes.slice(0, 6).map(episodeLine) : [];
-  const headerH = 40 + (headerLines.length + episodeLines.length) * 16 + (episodeLines.length > 0 ? 10 : 0);
+  const narrativeLines = narrativeText ? narrativeText.split("\n").slice(0, 20) : [];
+  const headerH =
+    40 +
+    (headerLines.length + episodeLines.length + narrativeLines.length) * 16 +
+    (episodeLines.length > 0 ? 10 : 0) +
+    (narrativeLines.length > 0 ? 26 : 0);
 
   const canvas = document.createElement("canvas");
   canvas.width = mapCanvas.width;
@@ -216,6 +289,18 @@ export async function exportReportImage({ mapView, geoRecords, anomalies, zoneEp
     ty += 16;
     ctx.font = "11px system-ui, sans-serif";
     for (const line of episodeLines) {
+      ctx.fillText(line, 16, ty);
+      ty += 16;
+    }
+  }
+  if (narrativeLines.length > 0) {
+    ty += 10;
+    ctx.font = "bold 12px system-ui, sans-serif";
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillText("Narrativa automática:", 16, ty);
+    ty += 16;
+    ctx.font = "11px system-ui, sans-serif";
+    for (const line of narrativeLines) {
       ctx.fillText(line, 16, ty);
       ty += 16;
     }
