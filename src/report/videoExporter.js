@@ -9,7 +9,7 @@ import { formatDateTime } from "../util/format.js";
 const FPS = 12;
 const STATIC_CLIP_MS = 2500;
 
-export async function exportVideo({ mapView, playback, onProgress }) {
+export async function exportVideo({ mapView, playback, zone, onProgress }) {
   if (playback.records.length === 0) {
     throw new Error("Não há pontos com geolocalização no intervalo selecionado para gerar vídeo.");
   }
@@ -30,6 +30,24 @@ export async function exportVideo({ mapView, playback, onProgress }) {
   ctx.fillStyle = "#e8ecf1";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   await drawTileMosaic(ctx, zoom, pixelBounds);
+
+  const project = makeProjector(leafletMap, zoom, pixelBounds);
+
+  if (zone && zone.lat != null && zone.lon != null && zone.radiusM) {
+    const metersPerPixel = (156543.03392 * Math.cos((zone.lat * Math.PI) / 180)) / Math.pow(2, zoom);
+    const radiusPx = zone.radiusM / metersPerPixel;
+    const center = project(zone.lat, zone.lon);
+    ctx.strokeStyle = "#d9534f";
+    ctx.fillStyle = "rgba(217,83,79,0.08)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, radiusPx, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   const baseImage = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
   const mimeType = pickSupportedMimeType();
@@ -40,8 +58,6 @@ export async function exportVideo({ mapView, playback, onProgress }) {
     if (e.data.size > 0) chunks.push(e.data);
   };
   const stopped = new Promise((resolve) => (recorder.onstop = resolve));
-
-  const project = makeProjector(leafletMap, zoom, pixelBounds);
 
   const renderFrame = (frame) => {
     ctx.putImageData(baseImage, 0, 0);
@@ -104,7 +120,7 @@ function drawOverlay(ctx, project, records, frame) {
   if (started) ctx.lineTo(curP.x, curP.y);
   ctx.stroke();
 
-  ctx.fillStyle = "#d9534f";
+  ctx.fillStyle = frame.record?.isViolation ? "#d9534f" : "#1e3a5f";
   ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = 2;
   ctx.beginPath();

@@ -26,12 +26,16 @@ function splitIpPort(ipPort) {
 
 let seq = 0;
 
+export function nextId() {
+  return `r${seq++}`;
+}
+
 /**
  * @param {Record<string, string>} valuesByKey valores brutos (string) já indexados
  *   pela chave canônica do FIELDS (accountNumber, cpf, createdAt, ...).
  */
 export function recordFromKeyedValues(valuesByKey) {
-  const rec = { id: `r${seq++}` };
+  const rec = { id: nextId() };
   for (const field of FIELDS) {
     if (field.key === "ipPort") continue;
     rec[field.key] = convertValue(field, valuesByKey[field.key]);

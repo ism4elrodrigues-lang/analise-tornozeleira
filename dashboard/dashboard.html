@@ -11,8 +11,13 @@
     <h1>Análise de Tornozeleira Eletrônica</h1>
     <div class="file-controls">
       <label class="file-btn">
-        Carregar arquivo (CSV ou PDF)
-        <input type="file" id="file-input" accept=".csv,.pdf,text/csv,application/pdf" hidden />
+        Carregar arquivo (CSV, XLSX ou PDF)
+        <input
+          type="file"
+          id="file-input"
+          accept=".csv,.xlsx,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          hidden
+        />
       </label>
       <span id="file-status" class="file-status"></span>
     </div>
@@ -25,6 +30,14 @@
   </p>
 
   <div id="warnings" class="warnings" hidden></div>
+
+  <section id="case-header" class="case-header" hidden>
+    <div class="case-header-grid">
+      <div><strong id="case-name">-</strong><br /><span id="case-subtitle" class="case-subtitle"></span></div>
+      <div id="case-zone" class="case-zone"></div>
+      <div id="case-legal" class="case-legal"></div>
+    </div>
+  </section>
 
   <section class="filter-bar">
     <label>De: <input type="datetime-local" id="filter-start" /></label>
@@ -67,9 +80,16 @@
 
   <section class="lower-grid">
     <div class="anomalies-panel">
-      <h2>Anomalias de deslocamento</h2>
-      <p class="hint">Trechos com velocidade implausível entre dois pontos consecutivos (possível burla/falha do dispositivo).</p>
-      <ul id="anomalies-list" class="anomalies-list"></ul>
+      <div id="zone-violations-block">
+        <h2>Violações da zona de exclusão</h2>
+        <p class="hint">Episódios em que o monitorado permaneceu dentro do raio de restrição.</p>
+        <ul id="zone-violations-list" class="anomalies-list"></ul>
+      </div>
+      <div id="speed-anomalies-block">
+        <h2>Anomalias de deslocamento</h2>
+        <p class="hint">Trechos com velocidade implausível entre dois pontos consecutivos (possível burla/falha do dispositivo).</p>
+        <ul id="anomalies-list" class="anomalies-list"></ul>
+      </div>
     </div>
     <div class="records-panel">
       <h2>Eventos (<span id="records-count">0</span>)</h2>
@@ -77,10 +97,9 @@
         <table id="records-table">
           <thead>
             <tr>
-              <th>Data/Hora criação</th>
-              <th>Ação</th>
-              <th>Dispositivo</th>
-              <th>IP</th>
+              <th>Data/Hora</th>
+              <th>Evento</th>
+              <th>Local / dispositivo</th>
               <th>Latitude</th>
               <th>Longitude</th>
               <th></th>
@@ -95,6 +114,7 @@
   <script src="../lib/leaflet/leaflet.js"></script>
   <script src="../lib/papaparse/papaparse.min.js"></script>
   <script src="../lib/jspdf/jspdf.umd.min.js"></script>
+  <script src="../lib/xlsx/xlsx.full.min.js"></script>
   <script type="module" src="dashboard.js"></script>
 </body>
 </html>

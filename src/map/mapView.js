@@ -25,6 +25,7 @@ export class MapView {
     this.pathLayer = L.polyline([], { color: "#1e3a5f", weight: 3, opacity: 0.7 }).addTo(this.map);
     this.markersLayer = L.layerGroup().addTo(this.map);
     this.anomalyLayer = L.layerGroup().addTo(this.map);
+    this.zoneLayer = L.layerGroup().addTo(this.map);
     this.cursorMarker = null;
   }
 
@@ -33,10 +34,11 @@ export class MapView {
     const latlngs = [];
     for (const r of records) {
       latlngs.push([r.lat, r.lon]);
+      const violation = !!r.isViolation;
       const marker = L.circleMarker([r.lat, r.lon], {
-        radius: 5,
-        color: "#1e3a5f",
-        fillColor: "#4cafd9",
+        radius: violation ? 6 : 5,
+        color: violation ? "#a83431" : "#1e3a5f",
+        fillColor: violation ? "#d9534f" : "#4cafd9",
         fillOpacity: 0.9,
         weight: 1,
       });
@@ -47,6 +49,34 @@ export class MapView {
     this.pathLayer.setLatLngs(latlngs);
     if (latlngs.length > 0) {
       this.map.fitBounds(latlngs, { padding: [30, 30], maxZoom: 15 });
+    }
+  }
+
+  /** @param {{lat:number, lon:number, radiusM:number, address?:string} | null} zone */
+  setExclusionZone(zone) {
+    this.zoneLayer.clearLayers();
+    if (!zone || zone.lat == null || zone.lon == null || !zone.radiusM) return;
+    const circle = L.circle([zone.lat, zone.lon], {
+      radius: zone.radiusM,
+      color: "#d9534f",
+      weight: 2,
+      fillColor: "#d9534f",
+      fillOpacity: 0.08,
+      dashArray: "4 4",
+    }).bindTooltip(
+      `Zona de exclusão (raio ${zone.radiusM.toFixed(0)} m)` + (zone.address ? ` — ${zone.address}` : "")
+    );
+    circle.addTo(this.zoneLayer);
+    L.circleMarker([zone.lat, zone.lon], {
+      radius: 4,
+      color: "#a83431",
+      fillColor: "#d9534f",
+      fillOpacity: 1,
+      weight: 1,
+    }).addTo(this.zoneLayer);
+
+    if (this.markersLayer.getLayers().length === 0) {
+      this.map.fitBounds(circle.getBounds(), { padding: [30, 30], maxZoom: 15 });
     }
   }
 
@@ -107,13 +137,18 @@ export class MapView {
 }
 
 function popupHtml(r) {
-  return `
-    <div class="map-popup">
-      <strong>${formatDateTime(r.createdAt)}</strong><br/>
-      Ação: ${escapeHtml(r.action || "-")}<br/>
-      IP: ${escapeHtml(r.ip || "-")}<br/>
-      Coordenadas: ${formatCoord(r.lat)}, ${formatCoord(r.lon)}
-    </div>`;
+  const lines = [`<strong>${formatDateTime(r.createdAt)}</strong>`];
+  if (r.status) {
+    const color = r.isViolation ? "#d9534f" : "#1e3a5f";
+    lines.push(`<span style="color:${color}; font-weight:600;">${escapeHtml(r.status)}</span>`);
+  } else if (r.action) {
+    lines.push(`Ação: ${escapeHtml(r.action)}`);
+  }
+  if (r.address) lines.push(escapeHtml(r.address));
+  if (r.distanceToZoneM != null) lines.push(`Distância à zona: ${r.distanceToZoneM.toFixed(0)} m`);
+  if (r.ip) lines.push(`IP: ${escapeHtml(r.ip)}`);
+  lines.push(`Coordenadas: ${formatCoord(r.lat)}, ${formatCoord(r.lon)}`);
+  return `<div class="map-popup">${lines.join("<br/>")}</div>`;
 }
 
 function escapeHtml(s) {

@@ -1,19 +1,22 @@
 import { lerpLatLng, lerp } from "../util/geo.js";
 
-// Os pings de geolocalização costumam ter intervalos muito irregulares (segundos
-// a dias). Para virar um playback assistível, cada segmento entre dois pontos
-// consecutivos ganha uma duração "de exibição" numa escala log, entre
-// MIN_SEGMENT_MS e MAX_SEGMENT_MS — não é tempo real, mas preserva a noção de
-// "esse trecho foi rápido" vs "esse trecho foi um salto grande no tempo".
-const MIN_SEGMENT_MS = 500;
-const MAX_SEGMENT_MS = 3500;
-const CAP_SECONDS_FOR_MAX = 86400; // 1 dia real já vale a duração máxima de exibição
+// Os pings de geolocalização variam de segundo a segundo (rastro contínuo de
+// tornozeleira, um ponto por minuto) a dia a dia (log esparso de acessos de
+// app). Para virar um playback assistível nos dois casos, distribuímos um
+// orçamento de tempo TOTAL fixo (que cresce pouco com a quantidade de pontos,
+// mas satura num teto) entre os segmentos, proporcionalmente a um peso em
+// escala log do intervalo real — preserva "esse trecho foi rápido" vs "esse
+// trecho foi um salto grande no tempo" sem o total explodir com centenas de
+// pontos nem ficar instantâneo com poucos.
+const MIN_SEGMENT_MS = 20;
+const MAX_SEGMENT_MS = 5000;
+const MIN_TOTAL_MS = 20_000;
+const MAX_TOTAL_MS = 90_000;
+const MS_PER_SEGMENT_BUDGET = 30;
 
-function segmentDisplayMs(realMs) {
+function segmentWeight(realMs) {
   const realSec = Math.max(0, realMs / 1000);
-  const t = Math.log10(1 + realSec) / Math.log10(1 + CAP_SECONDS_FOR_MAX);
-  const clamped = Math.min(1, Math.max(0, t));
-  return MIN_SEGMENT_MS + (MAX_SEGMENT_MS - MIN_SEGMENT_MS) * clamped;
+  return Math.log10(1 + realSec) + 0.001; // nunca zero, mesmo para gaps de 0s
 }
 
 export class PlaybackController {
@@ -34,13 +37,31 @@ export class PlaybackController {
     this.pause();
     this.records = geoRecordsSorted;
     this.segments = [];
+
+    const n = this.records.length - 1;
+    if (n <= 0) {
+      this.totalMs = 0;
+      this.elapsedMs = 0;
+      this._emit();
+      return;
+    }
+
+    const weights = [];
+    let totalWeight = 0;
+    for (let i = 0; i < n; i++) {
+      const realMs = Math.max(0, this.records[i + 1].createdAt.getTime() - this.records[i].createdAt.getTime());
+      const w = segmentWeight(realMs);
+      weights.push(w);
+      totalWeight += w;
+    }
+
+    const targetTotalMs = Math.min(MAX_TOTAL_MS, Math.max(MIN_TOTAL_MS, n * MS_PER_SEGMENT_BUDGET));
+
     let cum = 0;
-    for (let i = 0; i < this.records.length - 1; i++) {
-      const a = this.records[i];
-      const b = this.records[i + 1];
-      const realMs = Math.max(0, b.createdAt.getTime() - a.createdAt.getTime());
-      const displayMs = segmentDisplayMs(realMs);
-      this.segments.push({ from: a, to: b, displayMs, cumStart: cum });
+    for (let i = 0; i < n; i++) {
+      const raw = (weights[i] / totalWeight) * targetTotalMs;
+      const displayMs = Math.min(MAX_SEGMENT_MS, Math.max(MIN_SEGMENT_MS, raw));
+      this.segments.push({ from: this.records[i], to: this.records[i + 1], displayMs, cumStart: cum });
       cum += displayMs;
     }
     this.totalMs = cum;

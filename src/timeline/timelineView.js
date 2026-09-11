@@ -34,12 +34,9 @@ export class TimelineView {
     this.draw();
   }
 
-  setAnomalies(anomalies) {
-    this.anomalySet = new Set();
-    for (const a of anomalies) {
-      this.anomalySet.add(a.from.id);
-      this.anomalySet.add(a.to.id);
-    }
+  /** @param {Set<string>} idSet ids de registros a destacar (violações e/ou anomalias de velocidade) */
+  setHighlightedIds(idSet) {
+    this.anomalySet = idSet || new Set();
     this.draw();
   }
 
