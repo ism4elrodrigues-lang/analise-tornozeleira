@@ -177,6 +177,11 @@ internet normal, abra o Console do Chrome (F12) com o painel aberto e veja se
 há erros de rede envolvendo `arcgisonline.com` ou `openstreetmap.org` — pode
 ser bloqueio de extensão de privacidade/ad-blocker ou de rede corporativa.
 
+O scroll do mouse sobre o mapa não dá zoom (rola a página normalmente, como em
+qualquer outra parte do painel). O zoom fica nos botões "+"/"-" no canto
+superior esquerdo do mapa, ou nos gestos de zoom padrão do navegador/trackpad
+(pinça, Ctrl/Cmd + scroll).
+
 ## Fuso horário
 
 Datas/horas dos três formatos são tratadas como horário de Brasília (UTC-3,

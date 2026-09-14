@@ -38,7 +38,13 @@ const TILE_TIMEOUT_MS = 6000;
 
 export class MapView {
   constructor(containerId) {
-    this.map = L.map(containerId, { zoomControl: true, preferCanvas: true });
+    // Scroll do mouse rola a página normalmente; zoom fica só nos botões +/- do mapa
+    // (o zoomControl padrão do Leaflet, sempre visível no canto do mapa).
+    this.map = L.map(containerId, {
+      zoomControl: true,
+      preferCanvas: true,
+      scrollWheelZoom: false,
+    });
     this.map.setView([-15.78, -47.93], 4);
 
     this.tileLayer = null;
