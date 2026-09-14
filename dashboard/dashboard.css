@@ -262,9 +262,25 @@ button:disabled {
 }
 
 #map {
-  height: 440px;
+  position: relative;
+  height: clamp(480px, 72vh, 820px);
   border-radius: 8px;
   border: 1px solid var(--border);
+}
+
+.map-error-banner {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  max-width: 90%;
+  background: rgba(122, 82, 0, 0.92);
+  color: #fff;
+  font-size: 12px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  text-align: center;
 }
 
 .map-popup {
@@ -411,6 +427,18 @@ button:disabled {
 .note-btn.has-annotation {
   background: #fff2c6;
   color: #7a5200;
+}
+
+.hide-place-btn {
+  flex: none;
+  padding: 3px 7px;
+  font-size: 10.5px;
+  background: #eef2f6;
+  color: #a83431;
+}
+
+.hide-place-btn:hover {
+  background: #fdf1f0;
 }
 
 .table-wrap {
@@ -615,6 +643,26 @@ tbody tr.anomaly-row {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.icon-choice {
+  font-size: 18px;
+  line-height: 1;
+  padding: 6px 9px;
+  background: #f2f4f7;
+  border: 2px solid transparent;
+}
+
+.icon-choice.selected {
+  background: #eaf2fb;
+  border-color: var(--navy);
 }
 
 .note-photo-preview {

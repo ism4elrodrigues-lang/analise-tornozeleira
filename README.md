@@ -64,7 +64,9 @@ o que anotou, exporte o relatório (PDF/imagem) antes de fechar.
 12. **"Pontos de interesse"**: marque manualmente um local (endereço da
     vítima, do crime etc.) clicando em "+ Adicionar ponto de interesse" e
     depois no mapa — fica visível independente do caso ativo, para comparar
-    com o rastro.
+    com o rastro. Ao anotar (ou editar depois, pela lista ou pelo painel de
+    anotações), dá para escolher o ícone entre um conjunto de emoji (📍⭐🏠🏢
+    🚗📷🚩❗👤🔎).
 13. **"Narrativa automática"**: monta um rascunho cronológico em texto a
     partir das violações, anomalias, encontros e anotações do caso ativo —
     "Gerar narrativa" e "Copiar" para colar num relatório/despacho.
@@ -72,7 +74,9 @@ o que anotou, exporte o relatório (PDF/imagem) antes de fechar.
     pontos do caso ativo visitados repetidamente, com uma heurística simples
     de horário (predomínio noturno → possível residência; predomínio diurno
     em dia útil → possível trabalho) — é um indício, não uma identificação
-    confirmada, por isso também aceita anotação.
+    confirmada, por isso também aceita anotação e ícone customizado. Um local
+    que não fizer sentido pode ser tirado da lista/mapa com "Ocultar" (não
+    apaga os eventos, só o marcador).
 
 ## Formatos de entrada suportados
 
@@ -134,12 +138,21 @@ encontro nem leva em conta contexto (ex.: local público de grande circulação)
 
 ## Mapa
 
-Os tiles vêm do tile server padrão do OpenStreetMap (`tile.openstreetmap.org`),
-que não exige cadastro nem API key. Se esse provider mudar de política (como a
-CARTO fez, que era usada antes e passou a exigir API key nos tiles gratuitos),
-troque `TILE_URL`/`TILE_SUBDOMAINS`/`TILE_ATTRIBUTION` em `src/map/mapView.js`
-— precisa ser um provider que também libere CORS nos tiles, para que o
-exportador de vídeo/relatório consiga ler o mapa de volta via `<canvas>`.
+Os tiles vêm da Esri (`server.arcgisonline.com`, sem cadastro nem API key),
+com o tile server padrão do OpenStreetMap como alternativa automática — se um
+provider não conseguir carregar tiles (rede bloqueada, política do provider
+mudou, como já aconteceu com a CARTO), a extensão detecta e troca para o
+próximo sozinha; se todos falharem, mostra um aviso no lugar do mapa base (os
+pontos, trajetos e ícones continuam funcionando normalmente, só o fundo do
+mapa que fica em branco). Para adicionar/reordenar providers, edite
+`TILE_PROVIDERS` em `src/map/mapView.js` — cada um precisa liberar CORS nos
+tiles, para que o exportador de vídeo/relatório consiga ler o mapa de volta
+via `<canvas>`.
+
+Se o mapa aparecer sem o fundo (só pontos/linhas num fundo cinza) mesmo com
+internet normal, abra o Console do Chrome (F12) com o painel aberto e veja se
+há erros de rede envolvendo `arcgisonline.com` ou `openstreetmap.org` — pode
+ser bloqueio de extensão de privacidade/ad-blocker ou de rede corporativa.
 
 ## Fuso horário
 

@@ -38,7 +38,7 @@ export function hasAnnotation(key) {
  * Cria/atualiza uma anotação. Se texto e foto ficarem vazios, remove.
  * @returns a anotação salva, ou null se removida.
  */
-export function setAnnotation(key, { caseId, targetType, targetLabel, time, text, photoDataUrl }) {
+export function setAnnotation(key, { caseId, targetType, targetLabel, time, text, photoDataUrl, icon }) {
   const existing = store.get(key);
   const trimmedText = (text || "").trim();
   if (!trimmedText && !photoDataUrl) {
@@ -54,6 +54,7 @@ export function setAnnotation(key, { caseId, targetType, targetLabel, time, text
     time: time ?? existing?.time ?? null,
     text: trimmedText,
     photoDataUrl: photoDataUrl ?? null,
+    icon: icon ?? existing?.icon ?? null,
     createdAt: existing?.createdAt || new Date(),
     updatedAt: new Date(),
   };

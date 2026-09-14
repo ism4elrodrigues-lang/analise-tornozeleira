@@ -29,7 +29,7 @@ export async function exportVideo({ mapView, playback, zone, onProgress }) {
 
   ctx.fillStyle = "#e8ecf1";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await drawTileMosaic(ctx, zoom, pixelBounds);
+  await drawTileMosaic(ctx, zoom, pixelBounds, mapView.getActiveTileProvider());
 
   const project = makeProjector(leafletMap, zoom, pixelBounds);
 

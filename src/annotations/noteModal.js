@@ -1,11 +1,23 @@
 import { openPhotoAnnotator } from "./photoAnnotator.js";
 
+const ICON_CHOICES = ["📍", "⭐", "🏠", "🏢", "🚗", "📷", "🚩", "❗", "👤", "🔎"];
+
 /**
- * @returns {Promise<{text:string, photoDataUrl:string|null}|null>} null se cancelado.
+ * @param {boolean} [showIconPicker] mostra um seletor de ícone (emoji) — usado
+ *   para pontos de interesse e locais frequentes, que aparecem como ícone no mapa.
+ * @returns {Promise<{text:string, photoDataUrl:string|null, icon?:string}|null>} null se cancelado.
  */
-export function openNoteModal({ title, initialText = "", initialPhoto = null, allowDelete = false }) {
+export function openNoteModal({
+  title,
+  initialText = "",
+  initialPhoto = null,
+  initialIcon = null,
+  showIconPicker = false,
+  allowDelete = false,
+}) {
   return new Promise((resolve) => {
     let photoDataUrl = initialPhoto;
+    let selectedIcon = initialIcon || ICON_CHOICES[0];
 
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
@@ -14,6 +26,24 @@ export function openNoteModal({ title, initialText = "", initialPhoto = null, al
 
     const h = document.createElement("h3");
     h.textContent = title;
+
+    let iconRow = null;
+    if (showIconPicker) {
+      iconRow = document.createElement("div");
+      iconRow.className = "icon-picker";
+      const iconButtons = ICON_CHOICES.map((icon) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = icon;
+        b.className = "icon-choice" + (icon === selectedIcon ? " selected" : "");
+        b.addEventListener("click", () => {
+          selectedIcon = icon;
+          for (const other of iconButtons) other.classList.toggle("selected", other === b);
+        });
+        return b;
+      });
+      iconRow.append(...iconButtons);
+    }
 
     const textarea = document.createElement("textarea");
     textarea.value = initialText;
@@ -44,7 +74,9 @@ export function openNoteModal({ title, initialText = "", initialPhoto = null, al
     actions.className = "modal-actions";
     const saveBtn = mkBtn("Salvar", () => {
       cleanup();
-      resolve({ text: textarea.value, photoDataUrl });
+      const result = { text: textarea.value, photoDataUrl };
+      if (showIconPicker) result.icon = selectedIcon;
+      resolve(result);
     });
     const cancelBtn = mkBtn("Cancelar", () => {
       cleanup();
@@ -67,7 +99,8 @@ export function openNoteModal({ title, initialText = "", initialPhoto = null, al
       return b;
     }
 
-    box.append(h, textarea, photoRow, actions);
+    if (iconRow) box.append(h, iconRow, textarea, photoRow, actions);
+    else box.append(h, textarea, photoRow, actions);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     textarea.focus();

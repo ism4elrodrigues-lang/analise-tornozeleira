@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Análise de Tornozeleira Eletrônica",
   "version": "0.1.0",
-  "description": "Analisa logs de acesso/geolocalização (CSV ou PDF) e gera mapa, linha do tempo e playback do deslocamento.",
+  "description": "Analisa logs de acesso/geolocalização (XLSX, CSV ou PDF) e gera mapa, linha do tempo e playback do deslocamento.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -19,7 +19,8 @@
     }
   },
   "host_permissions": [
-    "https://*.basemaps.cartocdn.com/*",
+    "https://*.tile.openstreetmap.org/*",
+    "https://server.arcgisonline.com/*",
     "https://ipapi.co/*"
   ],
   "content_security_policy": {

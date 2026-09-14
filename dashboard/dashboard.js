@@ -85,6 +85,7 @@ let pois = [];
 let poiSeq = 0;
 let poiPlacementMode = false;
 let lastConnections = [];
+let hiddenPlaceKeys = new Set();
 
 function caseLabel(c) {
   return c.caseMeta?.name || c.fileName;
@@ -302,7 +303,7 @@ function renderCaseHeader() {
 
 // --- Anotações (texto/foto) reutilizáveis em eventos, violações, encontros, locais e POIs ---
 
-function makeNoteButton(key, ctx, onSaved) {
+function makeNoteButton(key, ctx, onSaved, iconOpts) {
   const btn = document.createElement("button");
   btn.className = "note-btn" + (hasAnnotation(key) ? " has-annotation" : "");
   btn.textContent = hasAnnotation(key) ? "📝 nota" : "+ nota";
@@ -314,13 +315,15 @@ function makeNoteButton(key, ctx, onSaved) {
       title: `Anotação — ${ctx.targetLabel}`,
       initialText: existing?.text || "",
       initialPhoto: existing?.photoDataUrl || null,
+      initialIcon: existing?.icon || iconOpts?.defaultIcon || null,
+      showIconPicker: !!iconOpts?.showIconPicker,
       allowDelete: !!existing,
     });
     if (result === null) return;
     if (!result.text.trim() && !result.photoDataUrl) {
       deleteAnnotation(key);
     } else {
-      setAnnotation(key, { ...ctx, text: result.text, photoDataUrl: result.photoDataUrl });
+      setAnnotation(key, { ...ctx, text: result.text, photoDataUrl: result.photoDataUrl, icon: result.icon });
     }
     if (onSaved) onSaved();
     renderAnnotations();
@@ -374,15 +377,18 @@ function renderAnnotations() {
     const editBtn = document.createElement("button");
     editBtn.textContent = "Editar";
     editBtn.addEventListener("click", async () => {
+      const showIconPicker = a.targetType === "poi" || a.targetType === "place";
       const result = await openNoteModal({
         title: `Anotação — ${a.targetLabel}`,
         initialText: a.text,
         initialPhoto: a.photoDataUrl,
+        initialIcon: a.icon,
+        showIconPicker,
         allowDelete: true,
       });
       if (result === null) return;
       if (!result.text.trim() && !result.photoDataUrl) deleteAnnotation(a.key);
-      else setAnnotation(a.key, { ...a, text: result.text, photoDataUrl: result.photoDataUrl });
+      else setAnnotation(a.key, { ...a, text: result.text, photoDataUrl: result.photoDataUrl, icon: result.icon });
       if (a.targetType === "poi") renderPois();
       renderAnnotations();
       render();
@@ -418,7 +424,7 @@ async function handleMapClickForPoi(latlng) {
   addPoiBtn.textContent = "+ Adicionar ponto de interesse";
   mapView.setClickToPlaceMode(false, null);
 
-  const result = await openNoteModal({ title: "Novo ponto de interesse" });
+  const result = await openNoteModal({ title: "Novo ponto de interesse", showIconPicker: true, initialIcon: "📍" });
   if (!result || (!result.text.trim() && !result.photoDataUrl)) return;
 
   const poi = { id: `poi-${poiSeq++}`, lat: latlng.lat, lon: latlng.lng };
@@ -430,6 +436,7 @@ async function handleMapClickForPoi(latlng) {
     time: null,
     text: result.text,
     photoDataUrl: result.photoDataUrl,
+    icon: result.icon,
   });
   renderPois();
   renderAnnotations();
@@ -441,9 +448,13 @@ function poiLabel(poi) {
   return firstLine || "Ponto de interesse";
 }
 
+function poiIcon(poi) {
+  return getAnnotation(buildPoiKey(poi.id))?.icon || "📍";
+}
+
 function renderPois() {
   mapView.setPois(
-    pois.map((p) => ({ ...p, label: poiLabel(p) })),
+    pois.map((p) => ({ ...p, label: poiLabel(p), icon: poiIcon(p) })),
     (p) => mapView.panTo([p.lat, p.lon])
   );
 
@@ -470,7 +481,10 @@ function renderPois() {
     actions.className = "case-row-actions";
     const key = buildPoiKey(p.id);
     actions.appendChild(
-      makeNoteButton(key, { caseId: null, targetType: "poi", targetLabel: "Ponto de interesse", time: null }, () => renderPois())
+      makeNoteButton(key, { caseId: null, targetType: "poi", targetLabel: "Ponto de interesse", time: null }, () => renderPois(), {
+        showIconPicker: true,
+        defaultIcon: "📍",
+      })
     );
     const goBtn = document.createElement("button");
     goBtn.textContent = "Ver no mapa";
@@ -514,8 +528,22 @@ function renderFrequentPlacesList(active) {
       `${p.label} — ${durationTxt} em ${p.visitCount} visita(s), ${p.daysCount} dia(s)` + (p.address ? ` — ${p.address}` : "");
     span.addEventListener("click", () => mapView.panTo([p.lat, p.lon]));
     const key = buildPlaceKey(active.id, p.lat, p.lon);
-    const noteBtn = makeNoteButton(key, { caseId: active.id, targetType: "place", targetLabel: p.label, time: null }, () => render());
-    li.append(span, noteBtn);
+    const noteBtn = makeNoteButton(
+      key,
+      { caseId: active.id, targetType: "place", targetLabel: p.label, time: null },
+      () => render(),
+      { showIconPicker: true, defaultIcon: "⭐" }
+    );
+    const hideBtn = document.createElement("button");
+    hideBtn.className = "hide-place-btn";
+    hideBtn.textContent = "Ocultar";
+    hideBtn.title = "Remover este local da lista e do mapa (não apaga os eventos, só o marcador)";
+    hideBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      hiddenPlaceKeys.add(key);
+      render();
+    });
+    li.append(span, noteBtn, hideBtn);
     frequentPlacesList.appendChild(li);
   });
 }
@@ -610,8 +638,15 @@ function render() {
     // Locais frequentes só são calculados/exibidos para o caso ativo, para não
     // poluir o mapa com marcadores de todos os casos visíveis ao mesmo tempo.
     const isActive = c.id === activeCaseId;
-    if (isActive) c.frequentPlaces = detectFrequentPlaces(c.geoRecords);
-    mapView.setCasePlaces(c.id, isActive ? c.frequentPlaces || [] : [], (p) => mapView.panTo([p.lat, p.lon]));
+    if (isActive) {
+      c.frequentPlaces = detectFrequentPlaces(c.geoRecords).filter(
+        (p) => !hiddenPlaceKeys.has(buildPlaceKey(c.id, p.lat, p.lon))
+      );
+    }
+    const placesForMap = isActive
+      ? (c.frequentPlaces || []).map((p) => ({ ...p, icon: getAnnotation(buildPlaceKey(c.id, p.lat, p.lon))?.icon }))
+      : [];
+    mapView.setCasePlaces(c.id, placesForMap, (p) => mapView.panTo([p.lat, p.lon]));
   }
 
   timelineView.setCases(

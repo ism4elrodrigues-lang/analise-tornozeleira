@@ -1,36 +1,120 @@
 // Depende do global `L` (Leaflet), carregado via <script> a partir de lib/leaflet/leaflet.js.
 //
-// Tile provider: usamos o tile server padrão do OpenStreetMap, que nunca
-// exige chave de API. (Antes usávamos CARTO, que passou a exigir cadastro/API
-// key nos tiles gratuitos — se isso mudar de novo no futuro, troque TILE_URL/
-// TILE_SUBDOMAINS/TILE_ATTRIBUTION abaixo.) Os tiles do OSM também enviam
-// cabeçalho CORS liberado, necessário para poder ler o mapa de volta via
-// <canvas> (crossOrigin) no exportador de vídeo/relatório.
+// Tile provider: a Esri vem primeiro porque o serviço é feito justamente para
+// ser embutido em apps de terceiros (é o que mais funciona sem chave dentro
+// de uma extensão/app, na nossa experiência); o OSM padrão vem como
+// alternativa — o tile server comunitário deles é voltado a uso em site
+// normal e pode rejeitar tráfego vindo de contexto de extensão. Se um não
+// carregar (rede bloqueada, política do provider mudou — já aconteceu com a
+// CARTO, que era usada antes e passou a exigir cadastro), cai automaticamente
+// pro próximo. Ambos são sem chave e enviam cabeçalho CORS liberado,
+// necessário para poder ler o mapa de volta via <canvas> no exportador de
+// vídeo/relatório.
 //
 // Suporta múltiplos casos simultâneos no mesmo mapa (cada um com sua própria
 // camada/cor), para comparar rastros e localizar possíveis conexões entre
 // monitorados.
 import { formatDateTime, formatCoord } from "../util/format.js";
 
-export const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-export const TILE_SUBDOMAINS = "abc";
-const TILE_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+export const TILE_PROVIDERS = [
+  {
+    name: "esri",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    subdomains: "a",
+    maxZoom: 19,
+    attribution: "Tiles &copy; Esri",
+  },
+  {
+    name: "osm",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    subdomains: "abc",
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  },
+];
+
+const TILE_ERROR_THRESHOLD = 6;
+const TILE_TIMEOUT_MS = 6000;
 
 export class MapView {
   constructor(containerId) {
     this.map = L.map(containerId, { zoomControl: true, preferCanvas: true });
-    L.tileLayer(TILE_URL, {
-      attribution: TILE_ATTRIBUTION,
-      subdomains: TILE_SUBDOMAINS,
-      maxZoom: 19,
-      crossOrigin: true,
-    }).addTo(this.map);
     this.map.setView([-15.78, -47.93], 4);
+
+    this.tileLayer = null;
+    this.activeProviderIndex = -1;
+    this._tileLoadCount = 0;
+    this._tileErrorCount = 0;
+    this._tileGeneration = 0;
+    this._fallbackTimer = null;
+    this._errorBanner = null;
+    this._addTileLayer(0);
 
     this.caseLayers = new Map(); // caseId -> { group, pathLayer, markersLayer, anomalyLayer, zoneLayer, placesLayer }
     this.cursorMarker = null;
     this.poiLayer = L.layerGroup().addTo(this.map);
+  }
+
+  _addTileLayer(index) {
+    clearTimeout(this._fallbackTimer);
+    const provider = TILE_PROVIDERS[index];
+    if (!provider) {
+      this._showMapError();
+      return;
+    }
+    this.activeProviderIndex = index;
+    this._tileLoadCount = 0;
+    this._tileErrorCount = 0;
+    // Trocar de layer não cancela requisições de tile já em voo da anterior —
+    // sem essa "geração", erros/loads tardios dela continuariam incrementando
+    // os contadores acima e reiniciando o fallback em loop.
+    const generation = ++this._tileGeneration;
+    if (this.tileLayer) this.map.removeLayer(this.tileLayer);
+    this._hideMapError();
+
+    this.tileLayer = L.tileLayer(provider.url, {
+      attribution: provider.attribution,
+      subdomains: provider.subdomains || "a",
+      maxZoom: provider.maxZoom,
+      crossOrigin: true,
+    });
+    this.tileLayer.on("tileload", () => {
+      if (generation !== this._tileGeneration) return;
+      this._tileLoadCount++;
+    });
+    this.tileLayer.on("tileerror", () => {
+      if (generation !== this._tileGeneration) return;
+      this._tileErrorCount++;
+      if (this._tileErrorCount >= TILE_ERROR_THRESHOLD && this._tileLoadCount === 0) {
+        this._addTileLayer(index + 1);
+      }
+    });
+    this.tileLayer.addTo(this.map);
+
+    this._fallbackTimer = setTimeout(() => {
+      if (generation === this._tileGeneration && this._tileLoadCount === 0) this._addTileLayer(index + 1);
+    }, TILE_TIMEOUT_MS);
+  }
+
+  getActiveTileProvider() {
+    return TILE_PROVIDERS[this.activeProviderIndex] || TILE_PROVIDERS[0];
+  }
+
+  _showMapError() {
+    if (this._errorBanner) return;
+    const el = document.createElement("div");
+    el.className = "map-error-banner";
+    el.textContent =
+      "Não foi possível carregar o mapa base (sem conexão com os provedores de tiles). Pontos, trajetos e ícones abaixo continuam funcionando normalmente.";
+    this.getContainer().appendChild(el);
+    this._errorBanner = el;
+  }
+
+  _hideMapError() {
+    if (this._errorBanner) {
+      this._errorBanner.remove();
+      this._errorBanner = null;
+    }
   }
 
   _ensureCase(caseId) {
@@ -126,7 +210,7 @@ export class MapView {
     for (const p of places) {
       const marker = L.marker([p.lat, p.lon], {
         icon: L.divIcon({
-          html: '<span class="place-marker-icon">⭐</span>',
+          html: `<span class="place-marker-icon">${p.icon || "⭐"}</span>`,
           className: "place-marker",
           iconSize: [20, 20],
           iconAnchor: [10, 18],
@@ -143,7 +227,7 @@ export class MapView {
     for (const p of pois) {
       const marker = L.marker([p.lat, p.lon], {
         icon: L.divIcon({
-          html: '<span class="poi-marker-icon">📍</span>',
+          html: `<span class="poi-marker-icon">${p.icon || "📍"}</span>`,
           className: "poi-marker",
           iconSize: [22, 22],
           iconAnchor: [11, 20],
