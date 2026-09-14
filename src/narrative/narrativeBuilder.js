@@ -4,6 +4,7 @@
 // relatório ou despacho. Não substitui a leitura dos dados brutos, é um
 // rascunho a revisar.
 import { formatDateTime } from "../util/format.js";
+import { summarizeTransportSegments } from "../patterns/transportMode.js";
 
 /**
  * @param {object} caseObj caso ativo (com filteredRecords/zoneEpisodes/speedAnomalies já calculados)
@@ -22,6 +23,12 @@ export function buildNarrative(caseObj, connectionsForCase = [], notesForCase = 
     lines.push(`Período analisado: ${formatDateTime(first)} até ${formatDateTime(last)}.`);
   }
   lines.push(`Total de eventos: ${records.length}. Com geolocalização: ${caseObj.geoRecords?.length ?? 0}.`);
+
+  const transportTotals = summarizeTransportSegments(caseObj.transportSegments || []);
+  if (transportTotals.length > 0) {
+    const parts = transportTotals.map((t) => `${t.mode.label.toLowerCase()}: ${t.distanceKm.toFixed(1)} km`);
+    lines.push(`Modo de deslocamento estimado (por velocidade, indício não confirmado): ${parts.join(", ")}.`);
+  }
   lines.push("");
 
   const events = [];

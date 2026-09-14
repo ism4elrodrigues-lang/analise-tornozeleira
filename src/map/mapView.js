@@ -128,6 +128,7 @@ export class MapView {
         anomalyLayer: L.layerGroup().addTo(group),
         zoneLayer: L.layerGroup().addTo(group),
         placesLayer: L.layerGroup().addTo(group),
+        modeSegmentsLayer: L.layerGroup().addTo(group),
       };
       this.caseLayers.set(caseId, entry);
     }
@@ -135,7 +136,7 @@ export class MapView {
   }
 
   /** (Re)desenha o trajeto, marcadores e zona de exclusão de um caso. */
-  setCase(caseId, { records, color, zone, visible, label, onSelect, onAnnotate }) {
+  setCase(caseId, { records, color, zone, visible, label, onSelect, onAnnotate, transportSegments, colorByMode }) {
     const entry = this._ensureCase(caseId);
     // guardados para o rastro (setCaseTrailWindow) poder redesenhar só os
     // pontos sem precisar que quem chama repasse cor/rótulo/callbacks de novo.
@@ -146,6 +147,24 @@ export class MapView {
 
     entry.pathLayer.setStyle({ color, weight: 3, opacity: 0.7 });
     this._drawCasePoints(entry, records);
+
+    entry.modeSegmentsLayer.clearLayers();
+    if (colorByMode && transportSegments && transportSegments.length > 0) {
+      // esconde a linha sólida na cor do caso e desenha um trecho colorido
+      // por modo de deslocamento estimado (a pé/bicicleta/carro-moto) por cima.
+      entry.pathLayer.setLatLngs([]);
+      for (const seg of transportSegments) {
+        L.polyline(
+          [
+            [seg.from.lat, seg.from.lon],
+            [seg.to.lat, seg.to.lon],
+          ],
+          { color: seg.mode.color, weight: 4, opacity: 0.85 }
+        )
+          .bindTooltip(`${seg.mode.label} — ${seg.speedKmh.toFixed(1)} km/h (estimado)`)
+          .addTo(entry.modeSegmentsLayer);
+      }
+    }
 
     entry.zoneLayer.clearLayers();
     if (zone && zone.lat != null && zone.lon != null && zone.radiusM) {
@@ -204,6 +223,11 @@ export class MapView {
   setCaseTrailWindow(caseId, records) {
     const entry = this.caseLayers.get(caseId);
     if (!entry) return;
+    // Independente da coloração por modo de deslocamento estar ativa na
+    // exibição estática: o rastro dinâmico do playback sempre usa a cor
+    // sólida do caso, para não deixar segmentos do trajeto completo
+    // (mode-coloridos) sobrepostos à janela do rastro.
+    entry.modeSegmentsLayer.clearLayers();
     this._drawCasePoints(entry, records);
   }
 

@@ -27,6 +27,12 @@ import {
 } from "../src/annotations/annotationStore.js";
 import { openNoteModal } from "../src/annotations/noteModal.js";
 import { detectFrequentPlaces } from "../src/patterns/frequentPlaces.js";
+import {
+  computeTransportSegments,
+  summarizeTransportSegments,
+  buildRecordModeIndex,
+  TRANSPORT_MODES,
+} from "../src/patterns/transportMode.js";
 import { buildNarrative } from "../src/narrative/narrativeBuilder.js";
 
 const CASE_COLORS = ["#1e3a5f", "#2e8b57", "#b8860b", "#6a5acd", "#c2185b", "#00838f", "#8d6e63", "#5d4037"];
@@ -46,6 +52,9 @@ const caseLegal = el("case-legal");
 const mapModeAllRadio = el("map-mode-all");
 const mapModeTrailRadio = el("map-mode-trail");
 const trailCountInput = el("trail-count-input");
+const colorByModeToggle = el("color-by-mode-toggle");
+const modeLegend = el("mode-legend");
+const transportModeList = el("transport-mode-list");
 const filterStart = el("filter-start");
 const filterEnd = el("filter-end");
 const applyFilterBtn = el("apply-filter");
@@ -91,6 +100,7 @@ let lastConnections = [];
 let hiddenPlaceKeys = new Set();
 let mapDisplayMode = "all"; // "all" | "trail"
 let trailCount = 10;
+let colorByMode = false;
 
 function caseLabel(c) {
   return c.caseMeta?.name || c.fileName;
@@ -195,6 +205,29 @@ trailCountInput.addEventListener("change", () => {
   trailCountInput.value = String(trailCount);
   if (mapDisplayMode === "trail") render();
 });
+
+colorByModeToggle.addEventListener("change", () => {
+  colorByMode = colorByModeToggle.checked;
+  render();
+});
+
+function renderModeLegend() {
+  if (!colorByMode) {
+    modeLegend.hidden = true;
+    return;
+  }
+  modeLegend.hidden = false;
+  modeLegend.innerHTML = "";
+  for (const mode of Object.values(TRANSPORT_MODES)) {
+    const span = document.createElement("span");
+    const swatch = document.createElement("span");
+    swatch.className = "mode-swatch";
+    swatch.style.background = mode.color;
+    span.appendChild(swatch);
+    span.appendChild(document.createTextNode(mode.label));
+    modeLegend.appendChild(span);
+  }
+}
 
 function applyFilter() {
   if (cases.length === 0) return;
@@ -585,6 +618,33 @@ function renderFrequentPlacesList(active) {
   });
 }
 
+// --- Modo de deslocamento (estimado por velocidade) ---
+
+function renderTransportModeList(active) {
+  transportModeList.innerHTML = "";
+  const segments = active?.transportSegments || [];
+  if (segments.length === 0) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = "Sem pontos suficientes para estimar o modo de deslocamento no intervalo selecionado.";
+    transportModeList.appendChild(li);
+    return;
+  }
+  const totals = summarizeTransportSegments(segments);
+  const totalKm = totals.reduce((sum, t) => sum + t.distanceKm, 0);
+  for (const t of totals) {
+    const li = document.createElement("li");
+    const span = document.createElement("span");
+    span.className = "anomaly-text";
+    span.style.color = t.mode.color;
+    const durationTxt = t.hours < 1 ? `${Math.round(t.hours * 60)} min` : `${t.hours.toFixed(1)} h`;
+    const pct = totalKm > 0 ? Math.round((t.distanceKm / totalKm) * 100) : 0;
+    span.textContent = `${t.mode.label} — ${t.distanceKm.toFixed(1)} km em ${durationTxt} (${pct}% do trajeto)`;
+    li.appendChild(span);
+    transportModeList.appendChild(li);
+  }
+}
+
 // --- Narrativa automática ---
 
 generateNarrativeBtn.addEventListener("click", () => {
@@ -633,6 +693,8 @@ function render() {
     zoneViolationsBlock.hidden = true;
     anomaliesList.innerHTML = "";
     frequentPlacesList.innerHTML = "";
+    transportModeList.innerHTML = "";
+    renderModeLegend();
     recordsTbody.innerHTML = "";
     recordsCount.textContent = "0";
     statsBox.innerHTML = "";
@@ -662,7 +724,14 @@ function render() {
       for (const r of ep.records) c.highlightIds.add(r.id);
     }
 
+    // Calculado sobre o rastro inteiro do período filtrado (não só o que está
+    // visível no modo "rastro") — a tabela/resumo/narrativa refletem a
+    // análise do período todo; só o desenho no mapa é que respeita o recorte.
+    c.transportSegments = computeTransportSegments(c.geoRecords);
+    c.recordModeById = buildRecordModeIndex(c.transportSegments);
+
     const staticPoints = mapDisplayMode === "trail" ? c.geoRecords.slice(-trailCount) : c.geoRecords;
+    const segmentsForMap = mapDisplayMode === "trail" ? computeTransportSegments(staticPoints) : c.transportSegments;
     mapView.setCase(c.id, {
       records: staticPoints,
       color: c.color,
@@ -676,6 +745,8 @@ function render() {
           { caseId: c.id, targetType: "record", targetLabel: formatDateTime(r.createdAt), time: r.createdAt },
           () => render()
         ),
+      transportSegments: segmentsForMap,
+      colorByMode,
     });
     mapView.setCaseAnomalies(c.id, c.speedAnomalies);
 
@@ -730,6 +801,8 @@ function render() {
   if (showZoneBlock) renderZoneViolations(active);
   renderSpeedAnomalies(active);
   renderFrequentPlacesList(active);
+  renderTransportModeList(active);
+  renderModeLegend();
   renderTable(active);
   renderCasesMenu();
   renderAnnotations();
@@ -869,6 +942,7 @@ function renderTable(active) {
     tr.appendChild(td(formatDateTime(r.createdAt)));
     tr.appendChild(td(r.status || r.action || "-"));
     tr.appendChild(td(detailsText(r)));
+    tr.appendChild(modeTd(active?.recordModeById?.get(r.id)));
     tr.appendChild(td(r.lat != null ? r.lat.toFixed(6) : "-"));
     tr.appendChild(td(r.lon != null ? r.lon.toFixed(6) : "-"));
 
@@ -921,6 +995,20 @@ function detailsText(r) {
 function td(text) {
   const cell = document.createElement("td");
   cell.textContent = text;
+  return cell;
+}
+
+function modeTd(mode) {
+  const cell = document.createElement("td");
+  if (!mode) {
+    cell.textContent = "-";
+    return cell;
+  }
+  const dot = document.createElement("span");
+  dot.className = "mode-swatch";
+  dot.style.background = mode.color;
+  cell.appendChild(dot);
+  cell.appendChild(document.createTextNode(mode.label));
   return cell;
 }
 

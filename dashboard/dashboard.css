@@ -287,6 +287,27 @@ button:disabled {
   padding: 2px 4px;
 }
 
+.mode-color-toggle {
+  margin-left: auto;
+}
+
+.mode-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: #444;
+}
+
+.mode-legend .mode-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
 .map-section {
   margin-bottom: 10px;
 }

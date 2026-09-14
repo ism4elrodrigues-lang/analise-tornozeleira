@@ -138,6 +138,19 @@ velocidade implícita entre dois pontos consecutivos — veja abaixo.
   ultrapassa 250 km/h — indício de possível falha ou burla do dispositivo,
   não uma conclusão definitiva.
 
+## Modo de deslocamento estimado
+
+A mesma velocidade implícita entre pontos consecutivos também é usada para
+estimar o modo de deslocamento em cada trecho: parado (≤1 km/h), a pé (≤7
+km/h), bicicleta (≤25 km/h) ou carro/moto (acima disso). Aparece na coluna
+"Modo" da tabela de eventos, num resumo por modo (distância/tempo/% do
+trajeto) e na narrativa automática. Opcionalmente, o trajeto no mapa pode ser
+colorido por modo em vez da cor sólida do caso ("Colorir trajeto por modo de
+deslocamento", acima do mapa). É uma heurística por faixa de velocidade, não
+uma medição real — as faixas se sobrepõem na prática (carro parado no
+trânsito anda como uma caminhada) e funciona melhor com pontos densos (tipo
+o rastro do SAC24) do que com logs esparsos de CSV/PDF genérico.
+
 ## Possíveis conexões entre casos
 
 Com dois ou mais casos visíveis simultaneamente, a extensão procura pares de
