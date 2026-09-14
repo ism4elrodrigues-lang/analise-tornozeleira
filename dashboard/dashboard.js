@@ -43,6 +43,9 @@ const caseName = el("case-name");
 const caseSubtitle = el("case-subtitle");
 const caseZone = el("case-zone");
 const caseLegal = el("case-legal");
+const mapModeAllRadio = el("map-mode-all");
+const mapModeTrailRadio = el("map-mode-trail");
+const trailCountInput = el("trail-count-input");
 const filterStart = el("filter-start");
 const filterEnd = el("filter-end");
 const applyFilterBtn = el("apply-filter");
@@ -86,6 +89,8 @@ let poiSeq = 0;
 let poiPlacementMode = false;
 let lastConnections = [];
 let hiddenPlaceKeys = new Set();
+let mapDisplayMode = "all"; // "all" | "trail"
+let trailCount = 10;
 
 function caseLabel(c) {
   return c.caseMeta?.name || c.fileName;
@@ -168,6 +173,27 @@ applyFilterBtn.addEventListener("click", applyFilter);
 clearFilterBtn.addEventListener("click", () => {
   resetFilterToFullRange();
   applyFilter();
+});
+
+// --- Modo de exibição do mapa: tudo de uma vez ou só um rastro recente ---
+
+mapModeAllRadio.addEventListener("change", () => {
+  if (mapModeAllRadio.checked) {
+    mapDisplayMode = "all";
+    render();
+  }
+});
+mapModeTrailRadio.addEventListener("change", () => {
+  if (mapModeTrailRadio.checked) {
+    mapDisplayMode = "trail";
+    render();
+  }
+});
+trailCountInput.addEventListener("change", () => {
+  const n = parseInt(trailCountInput.value, 10);
+  trailCount = Number.isFinite(n) && n >= 2 ? n : 10;
+  trailCountInput.value = String(trailCount);
+  if (mapDisplayMode === "trail") render();
 });
 
 function applyFilter() {
@@ -303,30 +329,34 @@ function renderCaseHeader() {
 
 // --- Anotações (texto/foto) reutilizáveis em eventos, violações, encontros, locais e POIs ---
 
+async function annotateTarget(key, ctx, onSaved, iconOpts) {
+  const existing = getAnnotation(key);
+  const result = await openNoteModal({
+    title: `Anotação — ${ctx.targetLabel}`,
+    initialText: existing?.text || "",
+    initialPhoto: existing?.photoDataUrl || null,
+    initialIcon: existing?.icon || iconOpts?.defaultIcon || null,
+    showIconPicker: !!iconOpts?.showIconPicker,
+    allowDelete: !!existing,
+  });
+  if (result === null) return;
+  if (!result.text.trim() && !result.photoDataUrl) {
+    deleteAnnotation(key);
+  } else {
+    setAnnotation(key, { ...ctx, text: result.text, photoDataUrl: result.photoDataUrl, icon: result.icon });
+  }
+  if (onSaved) onSaved();
+  renderAnnotations();
+}
+
 function makeNoteButton(key, ctx, onSaved, iconOpts) {
   const btn = document.createElement("button");
   btn.className = "note-btn" + (hasAnnotation(key) ? " has-annotation" : "");
   btn.textContent = hasAnnotation(key) ? "📝 nota" : "+ nota";
   btn.title = "Anotação (texto/foto)";
-  btn.addEventListener("click", async (e) => {
+  btn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const existing = getAnnotation(key);
-    const result = await openNoteModal({
-      title: `Anotação — ${ctx.targetLabel}`,
-      initialText: existing?.text || "",
-      initialPhoto: existing?.photoDataUrl || null,
-      initialIcon: existing?.icon || iconOpts?.defaultIcon || null,
-      showIconPicker: !!iconOpts?.showIconPicker,
-      allowDelete: !!existing,
-    });
-    if (result === null) return;
-    if (!result.text.trim() && !result.photoDataUrl) {
-      deleteAnnotation(key);
-    } else {
-      setAnnotation(key, { ...ctx, text: result.text, photoDataUrl: result.photoDataUrl, icon: result.icon });
-    }
-    if (onSaved) onSaved();
-    renderAnnotations();
+    annotateTarget(key, ctx, onSaved, iconOpts);
   });
   return btn;
 }
@@ -455,7 +485,14 @@ function poiIcon(poi) {
 function renderPois() {
   mapView.setPois(
     pois.map((p) => ({ ...p, label: poiLabel(p), icon: poiIcon(p) })),
-    (p) => mapView.panTo([p.lat, p.lon])
+    (p) => mapView.panTo([p.lat, p.lon]),
+    (p) =>
+      annotateTarget(
+        buildPoiKey(p.id),
+        { caseId: null, targetType: "poi", targetLabel: "Ponto de interesse", time: null },
+        () => renderPois(),
+        { showIconPicker: true, defaultIcon: "📍" }
+      )
   );
 
   poiList.innerHTML = "";
@@ -625,13 +662,20 @@ function render() {
       for (const r of ep.records) c.highlightIds.add(r.id);
     }
 
+    const staticPoints = mapDisplayMode === "trail" ? c.geoRecords.slice(-trailCount) : c.geoRecords;
     mapView.setCase(c.id, {
-      records: c.geoRecords,
+      records: staticPoints,
       color: c.color,
       zone: c.hasZone ? c.caseMeta.zone : null,
       visible: c.visible,
       label: caseLabel(c),
       onSelect: (r) => onRecordSelect(c.id, r),
+      onAnnotate: (r) =>
+        annotateTarget(
+          buildRecordKey(r.id),
+          { caseId: c.id, targetType: "record", targetLabel: formatDateTime(r.createdAt), time: r.createdAt },
+          () => render()
+        ),
     });
     mapView.setCaseAnomalies(c.id, c.speedAnomalies);
 
@@ -646,7 +690,18 @@ function render() {
     const placesForMap = isActive
       ? (c.frequentPlaces || []).map((p) => ({ ...p, icon: getAnnotation(buildPlaceKey(c.id, p.lat, p.lon))?.icon }))
       : [];
-    mapView.setCasePlaces(c.id, placesForMap, (p) => mapView.panTo([p.lat, p.lon]));
+    mapView.setCasePlaces(
+      c.id,
+      placesForMap,
+      (p) => mapView.panTo([p.lat, p.lon]),
+      (p) =>
+        annotateTarget(
+          buildPlaceKey(c.id, p.lat, p.lon),
+          { caseId: c.id, targetType: "place", targetLabel: p.label, time: null },
+          () => render(),
+          { showIconPicker: true, defaultIcon: "⭐" }
+        )
+    );
   }
 
   timelineView.setCases(
@@ -896,7 +951,18 @@ playback.onFrame = (frame) => {
   timelineView.setCursorTime(frame.time);
   playbackTimeLabel.textContent = formatDateTime(frame.time);
   if (!scrubbing) scrubber.value = String(Math.round(playback.fraction * 1000));
+  if (mapDisplayMode === "trail" && activeCaseId) {
+    mapView.setCaseTrailWindow(activeCaseId, computeTrailWindow(playback.records, frame, trailCount));
+  }
 };
+
+/** Últimos `count` pontos reais até o momento do quadro, mais a posição interpolada atual como ponta do rastro. */
+function computeTrailWindow(geoRecordsSorted, frame, count) {
+  const upToNow = geoRecordsSorted.filter((r) => r.createdAt.getTime() <= frame.time.getTime());
+  const windowRecords = upToNow.slice(-Math.max(1, count - 1));
+  const head = { ...frame.record, lat: frame.lat, lon: frame.lon, createdAt: frame.time, id: `${frame.record.id}-interp` };
+  return [...windowRecords, head];
+}
 
 playBtn.addEventListener("click", () => playback.play());
 pauseBtn.addEventListener("click", () => playback.pause());

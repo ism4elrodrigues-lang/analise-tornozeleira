@@ -41,7 +41,12 @@ o que anotou, exporte o relatório (PDF/imagem) antes de fechar.
    vale para todos os casos carregados.
 6. O mapa mostra os pontos com geolocalização de cada caso visível, na cor
    dele (vermelho nos pontos/trechos marcados como violação); a linha do
-   tempo mostra uma raia por caso visível, cada uma na sua cor.
+   tempo mostra uma raia por caso visível, cada uma na sua cor. Acima do
+   mapa, **"Exibição no mapa"** alterna entre "Ver tudo" (todos os pontos do
+   período filtrado, útil pra visão geral) e "Rastro" (só os últimos N
+   pontos — 10 por padrão, ajustável — pra não poluir quando há muitos
+   pontos próximos); durante a reprodução, o modo Rastro acompanha a
+   posição atual como um rastro que vai se movendo.
 7. Com 2+ casos visíveis, o painel **"Possíveis encontros entre casos"**
    sinaliza quando pontos de dois casos estiveram próximos no tempo e no
    espaço (até 200m e 10min de diferença, por padrão) — um indício de
@@ -60,13 +65,18 @@ o que anotou, exporte o relatório (PDF/imagem) antes de fechar.
     anexar uma anotação de texto e/ou foto (com uma anotação simples em cima —
     caneta ou texto) — útil para registrar confirmações, dúvidas ou evidência
     visual. Um painel **"Anotações"** no fim da página reúne todas, com
-    editar/remover.
+    editar/remover. **Dando duplo clique num marcador do mapa** (evento,
+    ponto de interesse ou local frequente) abre direto o mesmo modal de
+    anotação, sem precisar achar o item na lista.
 12. **"Pontos de interesse"**: marque manualmente um local (endereço da
     vítima, do crime etc.) clicando em "+ Adicionar ponto de interesse" e
     depois no mapa — fica visível independente do caso ativo, para comparar
-    com o rastro. Ao anotar (ou editar depois, pela lista ou pelo painel de
-    anotações), dá para escolher o ícone entre um conjunto de emoji (📍⭐🏠🏢
-    🚗📷🚩❗👤🔎).
+    com o rastro. Ao anotar (ou editar depois, pela lista, pelo painel de
+    anotações ou com duplo clique no marcador), dá para escolher o ícone
+    entre 24 emoji, incluindo vários voltados a investigação (👤 pessoa, 🕵️
+    suspeito, 👮 policial, 🚗🚙🚓🏍️ veículos, 💀 local de morte, 🩸 cena de
+    crime, 🔫 arma, 💰 valores, 📱 celular, 🚪 arrombamento, 🏥 hospital,
+    entre outros — passe o mouse sobre cada um pra ver o nome).
 13. **"Narrativa automática"**: monta um rascunho cronológico em texto a
     partir das violações, anomalias, encontros e anotações do caso ativo —
     "Gerar narrativa" e "Copiar" para colar num relatório/despacho.

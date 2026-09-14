@@ -135,27 +135,17 @@ export class MapView {
   }
 
   /** (Re)desenha o trajeto, marcadores e zona de exclusão de um caso. */
-  setCase(caseId, { records, color, zone, visible, label, onSelect }) {
+  setCase(caseId, { records, color, zone, visible, label, onSelect, onAnnotate }) {
     const entry = this._ensureCase(caseId);
-    entry.pathLayer.setStyle({ color, weight: 3, opacity: 0.7 });
-    entry.markersLayer.clearLayers();
+    // guardados para o rastro (setCaseTrailWindow) poder redesenhar só os
+    // pontos sem precisar que quem chama repasse cor/rótulo/callbacks de novo.
+    entry.color = color;
+    entry.label = label;
+    entry.onSelect = onSelect;
+    entry.onAnnotate = onAnnotate;
 
-    const latlngs = [];
-    for (const r of records) {
-      latlngs.push([r.lat, r.lon]);
-      const violation = !!r.isViolation;
-      const marker = L.circleMarker([r.lat, r.lon], {
-        radius: violation ? 6 : 5,
-        color: violation ? "#a83431" : color,
-        fillColor: violation ? "#d9534f" : color,
-        fillOpacity: 0.9,
-        weight: 1,
-      });
-      marker.bindPopup(popupHtml(r, label));
-      if (onSelect) marker.on("click", () => onSelect(r));
-      marker.addTo(entry.markersLayer);
-    }
-    entry.pathLayer.setLatLngs(latlngs);
+    entry.pathLayer.setStyle({ color, weight: 3, opacity: 0.7 });
+    this._drawCasePoints(entry, records);
 
     entry.zoneLayer.clearLayers();
     if (zone && zone.lat != null && zone.lon != null && zone.radiusM) {
@@ -184,6 +174,39 @@ export class MapView {
     this.setCaseVisible(caseId, visible !== false);
   }
 
+  _drawCasePoints(entry, records) {
+    entry.markersLayer.clearLayers();
+    const latlngs = [];
+    for (const r of records) {
+      latlngs.push([r.lat, r.lon]);
+      const violation = !!r.isViolation;
+      const marker = L.circleMarker([r.lat, r.lon], {
+        radius: violation ? 6 : 5,
+        color: violation ? "#a83431" : entry.color,
+        fillColor: violation ? "#d9534f" : entry.color,
+        fillOpacity: 0.9,
+        weight: 1,
+      });
+      marker.bindPopup(popupHtml(r, entry.label));
+      if (entry.onSelect) marker.on("click", () => entry.onSelect(r));
+      if (entry.onAnnotate) {
+        marker.on("dblclick", (e) => {
+          L.DomEvent.stopPropagation(e);
+          entry.onAnnotate(r);
+        });
+      }
+      marker.addTo(entry.markersLayer);
+    }
+    entry.pathLayer.setLatLngs(latlngs);
+  }
+
+  /** Redesenha só os pontos/trajeto de um caso já conhecido (modo "rastro", inclusive durante o playback). */
+  setCaseTrailWindow(caseId, records) {
+    const entry = this.caseLayers.get(caseId);
+    if (!entry) return;
+    this._drawCasePoints(entry, records);
+  }
+
   setCaseAnomalies(caseId, anomalies) {
     const entry = this._ensureCase(caseId);
     entry.anomalyLayer.clearLayers();
@@ -204,7 +227,7 @@ export class MapView {
   }
 
   /** Desenha os locais frequentes (padrão de vida) detectados para um caso. */
-  setCasePlaces(caseId, places, onSelect) {
+  setCasePlaces(caseId, places, onSelect, onAnnotate) {
     const entry = this._ensureCase(caseId);
     entry.placesLayer.clearLayers();
     for (const p of places) {
@@ -217,12 +240,18 @@ export class MapView {
         }),
       }).bindTooltip(`${p.label}${p.address ? ` — ${p.address}` : ""}`);
       if (onSelect) marker.on("click", () => onSelect(p));
+      if (onAnnotate) {
+        marker.on("dblclick", (e) => {
+          L.DomEvent.stopPropagation(e);
+          onAnnotate(p);
+        });
+      }
       marker.addTo(entry.placesLayer);
     }
   }
 
   /** Pontos de interesse marcados manualmente (globais, não ligados a um caso). */
-  setPois(pois, onSelect) {
+  setPois(pois, onSelect, onAnnotate) {
     this.poiLayer.clearLayers();
     for (const p of pois) {
       const marker = L.marker([p.lat, p.lon], {
@@ -234,6 +263,12 @@ export class MapView {
         }),
       }).bindTooltip(p.label || "Ponto de interesse");
       if (onSelect) marker.on("click", () => onSelect(p));
+      if (onAnnotate) {
+        marker.on("dblclick", (e) => {
+          L.DomEvent.stopPropagation(e);
+          onAnnotate(p);
+        });
+      }
       marker.addTo(this.poiLayer);
     }
   }

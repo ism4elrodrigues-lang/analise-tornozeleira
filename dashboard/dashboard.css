@@ -257,6 +257,36 @@ button:disabled {
   color: #333;
 }
 
+.map-display-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.map-display-label {
+  font-weight: 600;
+  color: #444;
+}
+
+.map-display-bar label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#trail-count-input {
+  width: 56px;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
 .map-section {
   margin-bottom: 10px;
 }

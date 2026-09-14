@@ -1,6 +1,31 @@
 import { openPhotoAnnotator } from "./photoAnnotator.js";
 
-const ICON_CHOICES = ["📍", "⭐", "🏠", "🏢", "🚗", "📷", "🚩", "❗", "👤", "🔎"];
+const ICON_CHOICES = [
+  { icon: "📍", label: "Ponto genérico" },
+  { icon: "⭐", label: "Local frequente" },
+  { icon: "🏠", label: "Residência" },
+  { icon: "🏢", label: "Trabalho / prédio" },
+  { icon: "🏥", label: "Hospital" },
+  { icon: "⛽", label: "Posto de combustível" },
+  { icon: "🚪", label: "Entrada forçada / arrombamento" },
+  { icon: "💀", label: "Local de morte" },
+  { icon: "🩸", label: "Cena de crime" },
+  { icon: "🔫", label: "Arma" },
+  { icon: "💰", label: "Valores / dinheiro" },
+  { icon: "📱", label: "Celular / dispositivo" },
+  { icon: "📷", label: "Câmera / foto" },
+  { icon: "👤", label: "Pessoa" },
+  { icon: "🕵️", label: "Suspeito / investigado" },
+  { icon: "👮", label: "Policial" },
+  { icon: "🚗", label: "Veículo" },
+  { icon: "🚙", label: "Veículo suspeito" },
+  { icon: "🚓", label: "Viatura policial" },
+  { icon: "🏍️", label: "Moto" },
+  { icon: "🚩", label: "Marco / alerta" },
+  { icon: "❗", label: "Importante" },
+  { icon: "⚠️", label: "Atenção" },
+  { icon: "🔎", label: "Investigar" },
+];
 
 /**
  * @param {boolean} [showIconPicker] mostra um seletor de ícone (emoji) — usado
@@ -17,7 +42,7 @@ export function openNoteModal({
 }) {
   return new Promise((resolve) => {
     let photoDataUrl = initialPhoto;
-    let selectedIcon = initialIcon || ICON_CHOICES[0];
+    let selectedIcon = initialIcon || ICON_CHOICES[0].icon;
 
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
@@ -31,10 +56,11 @@ export function openNoteModal({
     if (showIconPicker) {
       iconRow = document.createElement("div");
       iconRow.className = "icon-picker";
-      const iconButtons = ICON_CHOICES.map((icon) => {
+      const iconButtons = ICON_CHOICES.map(({ icon, label }) => {
         const b = document.createElement("button");
         b.type = "button";
         b.textContent = icon;
+        b.title = label;
         b.className = "icon-choice" + (icon === selectedIcon ? " selected" : "");
         b.addEventListener("click", () => {
           selectedIcon = icon;
