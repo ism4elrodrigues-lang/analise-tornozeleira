@@ -696,6 +696,23 @@ tbody tr.anomaly-row {
   gap: 10px;
 }
 
+.video-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.video-settings-row input[type="number"] {
+  width: 70px;
+}
+
+#video-settings-btn {
+  padding: 6px 10px;
+  font-size: 15px;
+  line-height: 1;
+}
+
 .icon-picker {
   display: flex;
   flex-wrap: wrap;

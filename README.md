@@ -146,10 +146,21 @@ km/h), bicicleta (≤25 km/h) ou carro/moto (acima disso). Aparece na coluna
 "Modo" da tabela de eventos, num resumo por modo (distância/tempo/% do
 trajeto) e na narrativa automática. Opcionalmente, o trajeto no mapa pode ser
 colorido por modo em vez da cor sólida do caso ("Colorir trajeto por modo de
-deslocamento", acima do mapa). É uma heurística por faixa de velocidade, não
-uma medição real — as faixas se sobrepõem na prática (carro parado no
-trânsito anda como uma caminhada) e funciona melhor com pontos densos (tipo
-o rastro do SAC24) do que com logs esparsos de CSV/PDF genérico.
+deslocamento", acima do mapa) — os PONTOS (marcadores) também mudam de cor
+pelo modo, tanto no modo "Ver tudo" quanto no "Rastro", parado ou durante a
+reprodução. É uma heurística por faixa de velocidade, não uma medição real —
+as faixas se sobrepõem na prática (carro parado no trânsito anda como uma
+caminhada) e funciona melhor com pontos densos (tipo o rastro do SAC24) do
+que com logs esparsos de CSV/PDF genérico.
+
+## Vídeo do deslocamento
+
+Ao gerar o vídeo, se um ponto do trajeto tiver foto anexada (anotação com
+foto), o vídeo pausa mostrando essa foto em tela cheia por alguns segundos
+antes de continuar a animação — útil pra emendar uma foto do local, de um
+documento ou de uma câmera no meio do trajeto reproduzido. A duração de cada
+pausa (padrão 5s) é configurável no botão "⚙" ao lado de "Gerar vídeo do
+deslocamento".
 
 ## Possíveis conexões entre casos
 

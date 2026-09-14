@@ -8,7 +8,8 @@ import { PlaybackController } from "../src/playback/playbackController.js";
 import { detectSpeedAnomalies } from "../src/anomalies/anomalyDetector.js";
 import { detectZoneViolationEpisodes } from "../src/anomalies/zoneViolations.js";
 import { detectAllConnections } from "../src/anomalies/caseConnections.js";
-import { exportVideo } from "../src/report/videoExporter.js";
+import { exportVideo, DEFAULT_PHOTO_HOLD_MS } from "../src/report/videoExporter.js";
+import { openVideoSettingsModal } from "../src/report/videoSettingsModal.js";
 import { exportReportPdf, exportReportImage } from "../src/report/reportExporter.js";
 import { lookupIp } from "../src/ipgeo/ipGeolocation.js";
 import { formatDateTime, toDatetimeLocalValue, parseDatetimeLocal } from "../src/util/format.js";
@@ -66,6 +67,7 @@ const scrubber = el("scrubber");
 const playbackTimeLabel = el("playback-time");
 const speedSelect = el("speed-select");
 const exportVideoBtn = el("export-video-btn");
+const videoSettingsBtn = el("video-settings-btn");
 const videoProgress = el("video-progress");
 const exportPdfBtn = el("export-pdf-btn");
 const exportImageBtn = el("export-image-btn");
@@ -101,6 +103,7 @@ let hiddenPlaceKeys = new Set();
 let mapDisplayMode = "all"; // "all" | "trail"
 let trailCount = 10;
 let colorByMode = false;
+let photoHoldMs = DEFAULT_PHOTO_HOLD_MS;
 
 function caseLabel(c) {
   return c.caseMeta?.name || c.fileName;
@@ -1039,8 +1042,15 @@ playback.onFrame = (frame) => {
   timelineView.setCursorTime(frame.time);
   playbackTimeLabel.textContent = formatDateTime(frame.time);
   if (!scrubbing) scrubber.value = String(Math.round(playback.fraction * 1000));
-  if (mapDisplayMode === "trail" && activeCaseId) {
-    mapView.setCaseTrailWindow(activeCaseId, computeTrailWindow(playback.records, frame, trailCount));
+  // playback.setRecords() (chamado a cada render()) dispara um "quadro zero"
+  // automático mesmo parado, pra resetar cursor/timeline — sem esse guard,
+  // isso sobrescreveria o rastro estático (já desenhado certo no render())
+  // com uma janela de só 2 pontos (o primeiro registro + sua cópia
+  // interpolada), que era exatamente o bug relatado: o modo "rastro" só
+  // parecia funcionar com o trajeto completo, nunca sozinho.
+  if (mapDisplayMode === "trail" && activeCaseId && (playback.playing || scrubbing)) {
+    const trailRecords = computeTrailWindow(playback.records, frame, trailCount);
+    mapView.setCaseTrailWindow(activeCaseId, trailRecords, computeTransportSegments(trailRecords));
   }
 };
 
@@ -1067,6 +1077,11 @@ scrubber.addEventListener("change", () => {
 
 // --- Exportação (sempre sobre o caso ativo) ---
 
+videoSettingsBtn.addEventListener("click", async () => {
+  const result = await openVideoSettingsModal({ initialPhotoHoldSeconds: Math.round(photoHoldMs / 1000) });
+  if (result) photoHoldMs = result.photoHoldSeconds * 1000;
+});
+
 exportVideoBtn.addEventListener("click", async () => {
   const active = getActiveCase();
   if (!active) return;
@@ -1077,6 +1092,8 @@ exportVideoBtn.addEventListener("click", async () => {
       mapView,
       playback,
       zone: active.hasZone ? active.caseMeta.zone : null,
+      photoHoldMs,
+      getPhotoForRecord: (r) => getAnnotation(buildRecordKey(r.id))?.photoDataUrl || null,
       onProgress: (f) => {
         videoProgress.textContent = `Gravando ${Math.round(f * 100)}%...`;
       },

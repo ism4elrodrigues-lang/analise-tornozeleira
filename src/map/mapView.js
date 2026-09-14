@@ -15,6 +15,7 @@
 // camada/cor), para comparar rastros e localizar possíveis conexões entre
 // monitorados.
 import { formatDateTime, formatCoord } from "../util/format.js";
+import { buildRecordModeIndex } from "../patterns/transportMode.js";
 
 export const TILE_PROVIDERS = [
   {
@@ -142,35 +143,20 @@ export class MapView {
   }
 
   /** (Re)desenha o trajeto, marcadores e zona de exclusão de um caso. */
-  setCase(caseId, { records, color, zone, visible, label, onSelect, onAnnotate, transportSegments, colorByMode }) {
+  setCase(caseId, { records, color, zone, visible, label, onSelect, onAnnotate, transportSegments = [], colorByMode }) {
     const entry = this._ensureCase(caseId);
     // guardados para o rastro (setCaseTrailWindow) poder redesenhar só os
-    // pontos sem precisar que quem chama repasse cor/rótulo/callbacks de novo.
+    // pontos sem precisar que quem chama repasse cor/rótulo/callbacks/opção de
+    // colorir por modo de novo.
     entry.color = color;
     entry.label = label;
     entry.onSelect = onSelect;
     entry.onAnnotate = onAnnotate;
+    entry.colorByMode = !!colorByMode;
 
     entry.pathLayer.setStyle({ color, weight: 3, opacity: 0.7 });
-    this._drawCasePoints(entry, records);
-
-    entry.modeSegmentsLayer.clearLayers();
-    if (colorByMode && transportSegments && transportSegments.length > 0) {
-      // esconde a linha sólida na cor do caso e desenha um trecho colorido
-      // por modo de deslocamento estimado (a pé/bicicleta/carro-moto) por cima.
-      entry.pathLayer.setLatLngs([]);
-      for (const seg of transportSegments) {
-        L.polyline(
-          [
-            [seg.from.lat, seg.from.lon],
-            [seg.to.lat, seg.to.lon],
-          ],
-          { color: seg.mode.color, weight: 4, opacity: 0.85 }
-        )
-          .bindTooltip(`${seg.mode.label} — ${seg.speedKmh.toFixed(1)} km/h (estimado)`)
-          .addTo(entry.modeSegmentsLayer);
-      }
-    }
+    this._drawCasePoints(entry, records, transportSegments);
+    this._drawModeSegments(entry, transportSegments);
 
     entry.zoneLayer.clearLayers();
     if (zone && zone.lat != null && zone.lon != null && zone.radiusM) {
@@ -199,20 +185,25 @@ export class MapView {
     this.setCaseVisible(caseId, visible !== false);
   }
 
-  _drawCasePoints(entry, records) {
+  _drawCasePoints(entry, records, transportSegments = []) {
     entry.markersLayer.clearLayers();
+    // Modo de deslocamento estimado do trecho que chega em cada ponto — só
+    // computado quando a coloração por modo está ativa para este caso.
+    const modeById = entry.colorByMode ? buildRecordModeIndex(transportSegments) : null;
     const latlngs = [];
     for (const r of records) {
       latlngs.push([r.lat, r.lon]);
       const violation = !!r.isViolation;
+      const mode = modeById ? modeById.get(r.id) : null;
+      const baseColor = mode ? mode.color : entry.color;
       const marker = L.circleMarker([r.lat, r.lon], {
         radius: violation ? 6 : 5,
-        color: violation ? "#a83431" : entry.color,
-        fillColor: violation ? "#d9534f" : entry.color,
+        color: violation ? "#a83431" : baseColor,
+        fillColor: violation ? "#d9534f" : baseColor,
         fillOpacity: 0.9,
         weight: 1,
       });
-      marker.bindPopup(popupHtml(r, entry.label));
+      marker.bindPopup(popupHtml(r, entry.label, mode));
       if (entry.onSelect) marker.on("click", () => entry.onSelect(r));
       if (entry.onAnnotate) {
         marker.on("dblclick", (e) => {
@@ -225,16 +216,33 @@ export class MapView {
     entry.pathLayer.setLatLngs(latlngs);
   }
 
+  /** Desenha (ou esconde) a linha sólida do caso e os trechos coloridos por modo de deslocamento, conforme `entry.colorByMode`. */
+  _drawModeSegments(entry, transportSegments) {
+    entry.modeSegmentsLayer.clearLayers();
+    if (entry.colorByMode && transportSegments && transportSegments.length > 0) {
+      // esconde a linha sólida na cor do caso e desenha um trecho colorido
+      // por modo de deslocamento estimado (a pé/bicicleta/carro-moto) por cima.
+      entry.pathLayer.setLatLngs([]);
+      for (const seg of transportSegments) {
+        L.polyline(
+          [
+            [seg.from.lat, seg.from.lon],
+            [seg.to.lat, seg.to.lon],
+          ],
+          { color: seg.mode.color, weight: 4, opacity: 0.85 }
+        )
+          .bindTooltip(`${seg.mode.label} — ${seg.speedKmh.toFixed(1)} km/h (estimado)`)
+          .addTo(entry.modeSegmentsLayer);
+      }
+    }
+  }
+
   /** Redesenha só os pontos/trajeto de um caso já conhecido (modo "rastro", inclusive durante o playback). */
-  setCaseTrailWindow(caseId, records) {
+  setCaseTrailWindow(caseId, records, transportSegments = []) {
     const entry = this.caseLayers.get(caseId);
     if (!entry) return;
-    // Independente da coloração por modo de deslocamento estar ativa na
-    // exibição estática: o rastro dinâmico do playback sempre usa a cor
-    // sólida do caso, para não deixar segmentos do trajeto completo
-    // (mode-coloridos) sobrepostos à janela do rastro.
-    entry.modeSegmentsLayer.clearLayers();
-    this._drawCasePoints(entry, records);
+    this._drawCasePoints(entry, records, transportSegments);
+    this._drawModeSegments(entry, transportSegments);
   }
 
   setCaseAnomalies(caseId, anomalies) {
@@ -389,7 +397,7 @@ export class MapView {
   }
 }
 
-function popupHtml(r, label) {
+function popupHtml(r, label, mode) {
   const lines = [];
   if (label) lines.push(`<em>${escapeHtml(label)}</em>`);
   lines.push(`<strong>${formatDateTime(r.createdAt)}</strong>`);
@@ -402,6 +410,7 @@ function popupHtml(r, label) {
   if (r.address) lines.push(escapeHtml(r.address));
   if (r.distanceToZoneM != null) lines.push(`Distância à zona: ${r.distanceToZoneM.toFixed(0)} m`);
   if (r.ip) lines.push(`IP: ${escapeHtml(r.ip)}`);
+  if (mode) lines.push(`<span style="color:${mode.color}; font-weight:600;">Modo estimado: ${escapeHtml(mode.label)}</span>`);
   lines.push(`Coordenadas: ${formatCoord(r.lat)}, ${formatCoord(r.lon)}`);
   return `<div class="map-popup">${lines.join("<br/>")}</div>`;
 }
