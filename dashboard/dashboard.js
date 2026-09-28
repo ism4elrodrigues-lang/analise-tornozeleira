@@ -1093,6 +1093,7 @@ exportVideoBtn.addEventListener("click", async () => {
       playback,
       zone: active.hasZone ? active.caseMeta.zone : null,
       photoHoldMs,
+      trailWindow: mapDisplayMode === "trail" ? trailCount : null,
       getPhotoForRecord: (r) => getAnnotation(buildRecordKey(r.id))?.photoDataUrl || null,
       onProgress: (f) => {
         videoProgress.textContent = `Gravando ${Math.round(f * 100)}%...`;

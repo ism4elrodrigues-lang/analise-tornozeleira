@@ -16,8 +16,19 @@ export const DEFAULT_PHOTO_HOLD_MS = 5000;
  *   registro, se houver — quando o trajeto animado "chega" nesse ponto, o vídeo pausa mostrando a foto em
  *   tela cheia por `photoHoldMs` antes de continuar.
  * @param {number} [opts.photoHoldMs] duração (ms) de cada pausa com foto. Padrão 5s.
+ * @param {number|null} [opts.trailWindow] quando definido, desenha só os últimos N pontos (mesmo comportamento
+ *   do modo "Rastro" do mapa) em vez do trajeto inteiro acumulado desde o início — espelha a opção de exibição
+ *   selecionada acima do mapa no momento da exportação.
  */
-export async function exportVideo({ mapView, playback, zone, onProgress, getPhotoForRecord, photoHoldMs = DEFAULT_PHOTO_HOLD_MS }) {
+export async function exportVideo({
+  mapView,
+  playback,
+  zone,
+  onProgress,
+  getPhotoForRecord,
+  photoHoldMs = DEFAULT_PHOTO_HOLD_MS,
+  trailWindow = null,
+}) {
   if (playback.records.length === 0) {
     throw new Error("Não há pontos com geolocalização no intervalo selecionado para gerar vídeo.");
   }
@@ -69,7 +80,7 @@ export async function exportVideo({ mapView, playback, zone, onProgress, getPhot
 
   const renderFrame = (frame) => {
     ctx.putImageData(baseImage, 0, 0);
-    drawOverlay(ctx, project, playback.records, frame);
+    drawOverlay(ctx, project, playback.records, frame, trailWindow);
   };
 
   recorder.start();
@@ -183,7 +194,20 @@ function loadImage(dataUrl) {
   });
 }
 
-function drawOverlay(ctx, project, records, frame) {
+/** Pontos já alcançados pela animação até o quadro atual — o trajeto todo desde o início, ou só os
+ * últimos `trailWindow` pontos (mesmo recorte do modo "Rastro" do mapa) quando definido. */
+function pickVisibleRecords(records, frame, trailWindow) {
+  const upToNow = [];
+  for (const r of records) {
+    if (r.createdAt.getTime() > frame.time.getTime()) break;
+    upToNow.push(r);
+  }
+  if (!trailWindow) return upToNow;
+  // -1: o ponto interpolado atual (curP, desenhado logo em seguida) já conta como a ponta do rastro.
+  return upToNow.slice(-Math.max(1, trailWindow - 1));
+}
+
+function drawOverlay(ctx, project, records, frame, trailWindow) {
   ctx.save();
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
@@ -191,8 +215,8 @@ function drawOverlay(ctx, project, records, frame) {
   ctx.lineWidth = 3;
   ctx.beginPath();
   let started = false;
-  for (const r of records) {
-    if (r.createdAt.getTime() > frame.time.getTime()) break;
+  const visibleRecords = pickVisibleRecords(records, frame, trailWindow);
+  for (const r of visibleRecords) {
     const p = project(r.lat, r.lon);
     if (!started) {
       ctx.moveTo(p.x, p.y);

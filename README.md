@@ -155,12 +155,17 @@ que com logs esparsos de CSV/PDF genérico.
 
 ## Vídeo do deslocamento
 
-Ao gerar o vídeo, se um ponto do trajeto tiver foto anexada (anotação com
-foto), o vídeo pausa mostrando essa foto em tela cheia por alguns segundos
-antes de continuar a animação — útil pra emendar uma foto do local, de um
-documento ou de uma câmera no meio do trajeto reproduzido. A duração de cada
-pausa (padrão 5s) é configurável no botão "⚙" ao lado de "Gerar vídeo do
-deslocamento".
+O vídeo gerado segue a mesma opção "Exibição no mapa" (acima do mapa): em
+"Ver tudo" o trajeto vai se acumulando do início ao fim; em "Rastro (últimos
+N pontos)", o vídeo mostra só a janela móvel dos últimos N pontos, igual ao
+mapa ao vivo — útil pra gerar um vídeo mais curto/focado num trecho, sem o
+resto do trajeto poluindo a cena.
+
+Se um ponto do trajeto tiver foto anexada (anotação com foto), o vídeo pausa
+mostrando essa foto em tela cheia por alguns segundos antes de continuar a
+animação — útil pra emendar uma foto do local, de um documento ou de uma
+câmera no meio do trajeto reproduzido. A duração de cada pausa (padrão 5s) é
+configurável no botão "⚙" ao lado de "Gerar vídeo do deslocamento".
 
 ## Possíveis conexões entre casos
 
