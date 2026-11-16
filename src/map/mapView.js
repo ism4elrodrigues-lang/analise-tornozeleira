@@ -169,7 +169,7 @@ export class MapView {
         dashArray: "4 4",
       })
         .bindTooltip(
-          `Zona de exclusão${label ? ` (${label})` : ""} — raio ${zone.radiusM.toFixed(0)} m` +
+          `${zone.label || "Zona de exclusão"}${label ? ` (${label})` : ""} — raio ${zone.radiusM.toFixed(0)} m` +
             (zone.address ? ` — ${zone.address}` : "")
         )
         .addTo(entry.zoneLayer);

@@ -110,6 +110,30 @@ falhas de sinal de até 3 minutos), não copiados de um resumo em texto que a
 planilha porventura já traga — então cobrem violações que uma síntese manual
 poderia ter arredondado ou deixado de fora.
 
+### PDF "Relatorio de Rastro de Monitorados SAC24"
+
+O PDF que o SAC24 gera a partir de uma consulta por endereço + raio +
+período (o que costuma ser juntado ao Projudi como certidão) é reconhecido
+automaticamente pelo título e lido por um parser próprio
+(`src/parsers/sac24PdfParser.js`):
+
+- **Parâmetros utilizados** (1ª página): endereço, latitude/longitude e raio
+  da consulta viram a **"Área consultada"** no cabeçalho do caso e o círculo
+  tracejado no mapa — é o raio da busca do relatório, **não** uma zona de
+  exclusão, então nenhum ponto é marcado como violação por estar dentro dele
+  (a distância de cada ponto até o centro aparece no popup);
+- **Legenda**: nome, sexo, CPF, prontuário SIGEP e equipamento do monitorado;
+- **Posicionamentos**: data/hora, latitude, longitude, logradouro, altitude,
+  alarmes (ex.: `uMov`, `gprs`, mantidos como vieram) e eventos (`gps`,
+  `sim1`, `tLig`... no campo de sinal);
+- processo, referência do movimento e assinatura vêm do carimbo do Projudi.
+
+O layout desse PDF tem colunas estreitas — nome, latitude e longitude
+quebram em duas linhas (`-25.516` / `89` = `-25.51689`) — e, no fim de
+algumas páginas, a parte quebrada de uma linha é impressa no topo da página
+seguinte. O parser usa a data/hora de cada linha como âncora, remonta as
+células quebradas e devolve esse "transbordo" à linha certa.
+
 ### CSV / PDF de logs de acesso/geolocalização genéricos
 
 CSV (ou PDF com texto selecionável, exportado da mesma tabela) com as colunas:

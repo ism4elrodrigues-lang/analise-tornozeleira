@@ -136,6 +136,7 @@ fileInput.addEventListener("change", async () => {
       caseMeta = result.meta;
     } else if (ext === "pdf" || file.type === "application/pdf") {
       result = await parsePdfFile(file);
+      caseMeta = result.meta || null;
     } else {
       throw new Error("Formato não reconhecido. Use um arquivo .csv, .xlsx ou .pdf.");
     }
@@ -348,10 +349,10 @@ function renderCaseHeader() {
   const zone = meta.zone || {};
   caseZone.innerHTML = "";
   if (zone.address) {
-    caseZone.appendChild(labelLine("Zona de exclusão", zone.address));
+    caseZone.appendChild(labelLine(zone.label || "Zona de exclusão", zone.address));
     caseZone.appendChild(
       labelLine(
-        "Raio de restrição",
+        zone.label ? "Raio" : "Raio de restrição",
         zone.radiusM ? `${zone.radiusM.toFixed(0)} m${zone.type ? ` — ${zone.type}` : ""}` : "-"
       )
     );
@@ -360,6 +361,7 @@ function renderCaseHeader() {
   const legal = meta.legal || {};
   caseLegal.innerHTML = "";
   if (legal.processNumber) caseLegal.appendChild(labelLine("Processo", legal.processNumber));
+  if (meta.periodRaw) caseLegal.appendChild(labelLine("Período do relatório", meta.periodRaw));
   if (legal.issuedAt) caseLegal.appendChild(labelLine("Relatório emitido em", legal.issuedAt));
 }
 

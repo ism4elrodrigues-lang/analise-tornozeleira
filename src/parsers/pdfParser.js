@@ -14,6 +14,7 @@
 import * as pdfjsLib from "../../lib/pdfjs/pdf.min.mjs";
 import { matchField } from "./fieldSchema.js";
 import { recordFromKeyedValues, sortRecordsByDate } from "./normalize.js";
+import { isSac24TrackReport, parseSac24Pages } from "./sac24PdfParser.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL(
   "lib/pdfjs/pdf.worker.min.mjs"
@@ -26,14 +27,28 @@ export async function parsePdfFile(file) {
   const buf = await file.arrayBuffer();
   const doc = await pdfjsLib.getDocument({ data: buf }).promise;
 
+  const pagesItems = [];
+  for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+    const page = await doc.getPage(pageNum);
+    const content = await page.getTextContent();
+    pagesItems.push(content.items);
+  }
+
+  // Relatório de Rastro de Monitorados do SAC24: layout próprio (células
+  // quebradas em 2 linhas, transbordo entre páginas) — parser dedicado.
+  const simplePages = pagesItems.map((items) =>
+    items.map((i) => ({ str: i.str, x: i.transform[4], y: i.transform[5] }))
+  );
+  if (isSac24TrackReport(simplePages)) {
+    return parseSac24Pages(simplePages);
+  }
+
   let columns = null;
   const rawRecords = [];
   const warnings = [];
 
-  for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
-    const page = await doc.getPage(pageNum);
-    const content = await page.getTextContent();
-    const lines = groupItemsIntoLines(content.items);
+  for (const items of pagesItems) {
+    const lines = groupItemsIntoLines(items);
 
     for (const line of lines) {
       const headerCols = tryDetectHeader(line);
