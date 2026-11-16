@@ -1,5 +1,5 @@
-// Gera ícones simples da extensão (um "pin" de localização) nos tamanhos exigidos pelo manifest.
-// Executado uma vez em dev-time; não faz parte do runtime da extensão.
+// Gera ícones simples (um "pin" de localização) usados como favicon da página.
+// Executado uma vez em dev-time; não faz parte do runtime da página.
 const { PNG } = require('pngjs');
 const fs = require('fs');
 const path = require('path');

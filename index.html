@@ -2,9 +2,11 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <title>Análise de Tornozeleira — Painel</title>
-  <link rel="stylesheet" href="../lib/leaflet/leaflet.css" />
-  <link rel="stylesheet" href="dashboard.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Análise de Tornozeleira Eletrônica</title>
+  <link rel="icon" href="icons/icon32.png" />
+  <link rel="stylesheet" href="lib/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="dashboard/dashboard.css" />
 </head>
 <body>
   <header class="topbar">
@@ -87,6 +89,8 @@
     <label class="speed-label">
       Velocidade
       <select id="speed-select">
+        <option value="0.1">0.1x</option>
+        <option value="0.25">0.25x</option>
         <option value="0.5">0.5x</option>
         <option value="1" selected>1x</option>
         <option value="2">2x</option>
@@ -179,10 +183,10 @@
     <ul id="annotations-list" class="annotations-list"></ul>
   </section>
 
-  <script src="../lib/leaflet/leaflet.js"></script>
-  <script src="../lib/papaparse/papaparse.min.js"></script>
-  <script src="../lib/jspdf/jspdf.umd.min.js"></script>
-  <script src="../lib/xlsx/xlsx.full.min.js"></script>
-  <script type="module" src="dashboard.js"></script>
+  <script src="lib/leaflet/leaflet.js"></script>
+  <script src="lib/papaparse/papaparse.min.js"></script>
+  <script src="lib/jspdf/jspdf.umd.min.js"></script>
+  <script src="lib/xlsx/xlsx.full.min.js"></script>
+  <script type="module" src="dashboard/dashboard.js"></script>
 </body>
 </html>

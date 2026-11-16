@@ -4,7 +4,7 @@
 // chave estável, derivada dos dados (não do objeto recalculado a cada
 // render), para sobreviver a refiltragens.
 //
-// Assim como o resto da extensão, isso fica só na memória da aba: fechar a
+// Assim como o resto da página, isso fica só na memória da aba: fechar a
 // aba perde as anotações (nenhum dado sai do navegador nem é salvo em disco).
 const store = new Map();
 let seq = 0;

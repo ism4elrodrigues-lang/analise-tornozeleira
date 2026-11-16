@@ -83,7 +83,7 @@ function caseLines(caseMeta, meta) {
     if (caseMeta.legal?.processNumber) lines.push(`Processo judicial: ${caseMeta.legal.processNumber}`);
     if (caseMeta.zone?.address) {
       lines.push(
-        `Zona de exclusão: ${caseMeta.zone.address} (raio ${caseMeta.zone.radiusM ? caseMeta.zone.radiusM.toFixed(0) : "-"} m)`
+        `${caseMeta.zone.label || "Zona de exclusão"}: ${caseMeta.zone.address} (raio ${caseMeta.zone.radiusM ? caseMeta.zone.radiusM.toFixed(0) : "-"} m)`
       );
     }
     return lines;

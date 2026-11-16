@@ -1,10 +1,8 @@
 // Depende do global `L` (Leaflet), carregado via <script> a partir de lib/leaflet/leaflet.js.
 //
 // Tile provider: a Esri vem primeiro porque o serviço é feito justamente para
-// ser embutido em apps de terceiros (é o que mais funciona sem chave dentro
-// de uma extensão/app, na nossa experiência); o OSM padrão vem como
-// alternativa — o tile server comunitário deles é voltado a uso em site
-// normal e pode rejeitar tráfego vindo de contexto de extensão. Se um não
+// ser embutido em apps de terceiros (funciona sem chave); o OSM padrão vem
+// como alternativa. Se um não
 // carregar (rede bloqueada, política do provider mudou — já aconteceu com a
 // CARTO, que era usada antes e passou a exigir cadastro), cai automaticamente
 // pro próximo. Ambos são sem chave e enviam cabeçalho CORS liberado,
@@ -169,7 +167,7 @@ export class MapView {
         dashArray: "4 4",
       })
         .bindTooltip(
-          `Zona de exclusão${label ? ` (${label})` : ""} — raio ${zone.radiusM.toFixed(0)} m` +
+          `${zone.label || "Zona de exclusão"}${label ? ` (${label})` : ""} — raio ${zone.radiusM.toFixed(0)} m` +
             (zone.address ? ` — ${zone.address}` : "")
         )
         .addTo(entry.zoneLayer);

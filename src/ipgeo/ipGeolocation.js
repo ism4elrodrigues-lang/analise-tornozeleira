@@ -1,6 +1,6 @@
 // Busca opcional (opt-in, disparada manualmente por linha) de geolocalização
 // aproximada a partir do IP, para preencher eventos sem lat/lon. Diferente do
-// resto da extensão, isso envia o IP a um serviço externo (ipapi.co) — por
+// resto da página, isso envia o IP a um serviço externo (ipapi.co) — por
 // isso nunca é chamado automaticamente.
 const cache = new Map();
 

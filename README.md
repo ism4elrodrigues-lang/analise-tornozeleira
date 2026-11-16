@@ -1,6 +1,6 @@
 # Análise de Tornozeleira Eletrônica
 
-Extensão Chrome (Manifest V3) para analisar logs de acesso/geolocalização de
+Página web para analisar logs de acesso/geolocalização de
 monitoramento eletrônico (XLSX, CSV ou PDF) e gerar mapa, linha do tempo e um
 playback do deslocamento.
 
@@ -17,17 +17,25 @@ Anotações, fotos e pontos de interesse também ficam só na memória da aba �
 não são salvos em disco nem persistem se a aba for fechada. Se quiser manter
 o que anotou, exporte o relatório (PDF/imagem) antes de fechar.
 
-## Instalação (modo desenvolvedor)
+## Como usar
 
-1. Abra `chrome://extensions` no Chrome.
-2. Ative o "Modo do desenvolvedor" (canto superior direito).
-3. Clique em "Carregar sem compactação" e selecione a pasta deste repositório.
-4. Clique no ícone da extensão e depois em "Abrir painel de análise".
+Abra a página publicada (GitHub Pages) — não há nada para instalar. O
+`index.html` da raiz é o próprio painel. Mesmo publicado, **o processamento
+é 100% local no navegador de quem acessa**: o arquivo carregado nunca é
+enviado ao servidor do site, que só entrega os arquivos HTML/JS.
+
+Para publicar: em *Settings → Pages* do repositório, em *Build and
+deployment*, escolha *Deploy from a branch*, branch `main`, pasta `/ (root)`.
+O site fica em `https://<usuário>.github.io/analise-tornozeleira/`.
+
+Para testar localmente: `python3 -m http.server` na pasta do repositório e
+abra `http://localhost:8000/` (abrir o HTML direto via `file://` não
+funciona, por causa dos módulos JS).
 
 ## Uso
 
-1. No painel (aberto em uma nova aba), clique em "Adicionar caso (CSV, XLSX ou PDF)".
-2. O formato é reconhecido automaticamente pela extensão do nome do arquivo.
+1. Na página, clique em "Adicionar caso (CSV, XLSX ou PDF)".
+2. O formato é reconhecido automaticamente pela extensão do nome do arquivo (.csv, .xlsx, .pdf).
 3. **Cada arquivo carregado vira um novo caso** na lista "Casos carregados" —
    os anteriores continuam abertos, cada um com sua própria cor no mapa e na
    linha do tempo. Na lista dá para: mostrar/ocultar um caso, marcar qual é o
@@ -110,6 +118,30 @@ falhas de sinal de até 3 minutos), não copiados de um resumo em texto que a
 planilha porventura já traga — então cobrem violações que uma síntese manual
 poderia ter arredondado ou deixado de fora.
 
+### PDF "Relatorio de Rastro de Monitorados SAC24"
+
+O PDF que o SAC24 gera a partir de uma consulta por endereço + raio +
+período (o que costuma ser juntado ao Projudi como certidão) é reconhecido
+automaticamente pelo título e lido por um parser próprio
+(`src/parsers/sac24PdfParser.js`):
+
+- **Parâmetros utilizados** (1ª página): endereço, latitude/longitude e raio
+  da consulta viram a **"Área consultada"** no cabeçalho do caso e o círculo
+  tracejado no mapa — é o raio da busca do relatório, **não** uma zona de
+  exclusão, então nenhum ponto é marcado como violação por estar dentro dele
+  (a distância de cada ponto até o centro aparece no popup);
+- **Legenda**: nome, sexo, CPF, prontuário SIGEP e equipamento do monitorado;
+- **Posicionamentos**: data/hora, latitude, longitude, logradouro, altitude,
+  alarmes (ex.: `uMov`, `gprs`, mantidos como vieram) e eventos (`gps`,
+  `sim1`, `tLig`... no campo de sinal);
+- processo, referência do movimento e assinatura vêm do carimbo do Projudi.
+
+O layout desse PDF tem colunas estreitas — nome, latitude e longitude
+quebram em duas linhas (`-25.516` / `89` = `-25.51689`) — e, no fim de
+algumas páginas, a parte quebrada de uma linha é impressa no topo da página
+seguinte. O parser usa a data/hora de cada linha como âncora, remonta as
+células quebradas e devolve esse "transbordo" à linha certa.
+
 ### CSV / PDF de logs de acesso/geolocalização genéricos
 
 CSV (ou PDF com texto selecionável, exportado da mesma tabela) com as colunas:
@@ -169,7 +201,7 @@ configurável no botão "⚙" ao lado de "Gerar vídeo do deslocamento".
 
 ## Possíveis conexões entre casos
 
-Com dois ou mais casos visíveis simultaneamente, a extensão procura pares de
+Com dois ou mais casos visíveis simultaneamente, a página procura pares de
 pontos (um de cada caso) que estiveram a até 200m de distância e 10min um do
 outro, agrupando ocorrências próximas no tempo num único episódio. É apenas
 um indício estatístico de coincidência de tempo/local — não é prova de
@@ -180,7 +212,7 @@ encontro nem leva em conta contexto (ex.: local público de grande circulação)
 Os tiles vêm da Esri (`server.arcgisonline.com`, sem cadastro nem API key),
 com o tile server padrão do OpenStreetMap como alternativa automática — se um
 provider não conseguir carregar tiles (rede bloqueada, política do provider
-mudou, como já aconteceu com a CARTO), a extensão detecta e troca para o
+mudou, como já aconteceu com a CARTO), a página detecta e troca para o
 próximo sozinha; se todos falharem, mostra um aviso no lugar do mapa base (os
 pontos, trajetos e ícones continuam funcionando normalmente, só o fundo do
 mapa que fica em branco). Para adicionar/reordenar providers, edite
@@ -189,9 +221,9 @@ tiles, para que o exportador de vídeo/relatório consiga ler o mapa de volta
 via `<canvas>`.
 
 Se o mapa aparecer sem o fundo (só pontos/linhas num fundo cinza) mesmo com
-internet normal, abra o Console do Chrome (F12) com o painel aberto e veja se
+internet normal, abra o Console do navegador (F12) com a página aberta e veja se
 há erros de rede envolvendo `arcgisonline.com` ou `openstreetmap.org` — pode
-ser bloqueio de extensão de privacidade/ad-blocker ou de rede corporativa.
+ser bloqueio de ad-blocker/extensão de privacidade do navegador ou de rede corporativa.
 
 O scroll do mouse sobre o mapa não dá zoom (rola a página normalmente, como em
 qualquer outra parte do painel). O zoom fica nos botões "+"/"-" no canto
@@ -202,14 +234,13 @@ superior esquerdo do mapa, ou nos gestos de zoom padrão do navegador/trackpad
 
 Datas/horas dos três formatos são tratadas como horário de Brasília (UTC-3,
 sem horário de verão desde 2019) — tanto na exibição quanto nos filtros de
-período — independente do fuso configurado no sistema de quem usa a extensão.
+período — independente do fuso configurado no sistema de quem usa a página.
 
 ## Estrutura do projeto
 
 ```
-manifest.json          Manifest V3
-popup/                 Popup da extensão (só abre o painel numa nova aba)
-dashboard/              Painel principal (mapa, linha do tempo, playback)
+index.html              A página (painel: mapa, linha do tempo, playback)
+dashboard/              CSS e JS do painel
 src/parsers/            Leitura de CSV, XLSX e PDF -> registros normalizados
 src/map/                Mapa (Leaflet), zona de exclusão e captura de tiles para vídeo/relatório
 src/timeline/           Linha do tempo (canvas)
@@ -221,13 +252,13 @@ src/narrative/          Narrativa automática em texto a partir do que foi calcu
 src/report/             Exportação de vídeo e relatório (PDF/imagem)
 src/ipgeo/              Geolocalização por IP (opt-in)
 lib/                    Bibliotecas de terceiros vendorizadas (Leaflet, PapaParse, pdf.js, SheetJS, jsPDF)
-scripts/generate-icons.js  Gera os ícones da extensão (dev-time)
+scripts/generate-icons.js  Gera os ícones/favicon (dev-time)
 ```
 
 ## Desenvolvimento
 
-As bibliotecas em `lib/` são copiadas do `node_modules` (não usamos CDN, por
-exigência do Manifest V3 / CSP). Para atualizar:
+As bibliotecas em `lib/` são copiadas do `node_modules` (não usamos CDN: a página
+funciona sem depender de terceiros além dos tiles do mapa). Para atualizar:
 
 ```
 npm install

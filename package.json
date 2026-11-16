@@ -1,7 +1,7 @@
 {
   "name": "analise-tornozeleira",
   "version": "1.0.0",
-  "description": "Extensão Chrome (Manifest V3) para análise de logs de acesso/geolocalização de monitoramento eletrônico.",
+  "description": "Página web para análise de logs de acesso/geolocalização de monitoramento eletrônico.",
   "private": true,
   "scripts": {
     "generate-icons": "node scripts/generate-icons.js"

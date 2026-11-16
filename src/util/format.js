@@ -2,7 +2,7 @@
 // horário de Brasília (UTC-3, sem horário de verão desde 2019). Fixamos essa
 // timezone tanto na exibição quanto na leitura dos filtros de data/hora para
 // que os horários mostrados batam com os da planilha original, independente
-// do fuso configurado no sistema operacional de quem está usando a extensão.
+// do fuso configurado no sistema operacional de quem está usando a página.
 const TZ = "America/Sao_Paulo";
 
 const dtFormatter = new Intl.DateTimeFormat("pt-BR", {
