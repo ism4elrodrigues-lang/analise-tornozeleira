@@ -16,7 +16,7 @@ import { matchField } from "./fieldSchema.js";
 import { recordFromKeyedValues, sortRecordsByDate } from "./normalize.js";
 import { isSac24TrackReport, parseSac24Pages } from "./sac24PdfParser.js";
 
-// Caminho relativo a este módulo: funciona tanto no site quanto na extensão.
+// Caminho relativo a este módulo (não depende de onde a página está hospedada).
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "../../lib/pdfjs/pdf.worker.min.mjs",
   import.meta.url

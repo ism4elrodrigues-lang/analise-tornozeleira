@@ -12,7 +12,7 @@
 // A aba de log é localizada automaticamente pelo cabeçalho (não pelo nome da
 // aba), então planilhas com nomes de aba diferentes também devem funcionar,
 // desde que as colunas sejam reconhecíveis pelos aliases abaixo. Se não
-// houver aba de metadados reconhecível, a extensão segue funcionando só com
+// houver aba de metadados reconhecível, a página segue funcionando só com
 // o rastro (sem cabeçalho do caso nem zona de exclusão).
 import { normalizeHeaderKey } from "./fieldSchema.js";
 import { nextId, sortRecordsByDate } from "./normalize.js";
