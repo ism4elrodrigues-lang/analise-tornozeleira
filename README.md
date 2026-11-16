@@ -17,7 +17,23 @@ Anotações, fotos e pontos de interesse também ficam só na memória da aba �
 não são salvos em disco nem persistem se a aba for fechada. Se quiser manter
 o que anotou, exporte o relatório (PDF/imagem) antes de fechar.
 
-## Instalação (modo desenvolvedor)
+## Uso como site (GitHub Pages)
+
+O mesmo código funciona como site estático, sem instalar nada: a raiz
+(`index.html`) abre o painel em `dashboard/dashboard.html`. Mesmo publicado,
+**o processamento continua 100% local no navegador de quem acessa** — o
+arquivo carregado nunca é enviado ao servidor do site (que só entrega os
+arquivos HTML/JS).
+
+Para publicar: em *Settings → Pages* do repositório, em *Build and
+deployment*, escolha *Deploy from a branch*, branch `main`, pasta `/ (root)`.
+O site fica em `https://<usuário>.github.io/analise-tornozeleira/`.
+
+Para testar localmente: `python3 -m http.server` na pasta do repositório e
+abra `http://localhost:8000/` (abrir o HTML direto via `file://` não
+funciona, por causa dos módulos JS).
+
+## Instalação como extensão (modo desenvolvedor)
 
 1. Abra `chrome://extensions` no Chrome.
 2. Ative o "Modo do desenvolvedor" (canto superior direito).

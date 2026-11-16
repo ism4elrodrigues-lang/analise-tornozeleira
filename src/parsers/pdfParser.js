@@ -16,9 +16,11 @@ import { matchField } from "./fieldSchema.js";
 import { recordFromKeyedValues, sortRecordsByDate } from "./normalize.js";
 import { isSac24TrackReport, parseSac24Pages } from "./sac24PdfParser.js";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL(
-  "lib/pdfjs/pdf.worker.min.mjs"
-);
+// Caminho relativo a este módulo: funciona tanto no site quanto na extensão.
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "../../lib/pdfjs/pdf.worker.min.mjs",
+  import.meta.url
+).href;
 
 const Y_TOLERANCE = 2.5;
 const HEADER_MIN_MATCHES = 4;
